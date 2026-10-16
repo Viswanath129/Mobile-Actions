@@ -49,6 +49,12 @@ sealed class TurnOutcome(
         override val requestId: String? = null,
         override val timings: RequestTimings? = null
     ) : TurnOutcome(requestId, timings)
+
+    data class MultiStepPlanOutcome(
+        val plan: com.example.functiongemmavoice.runtime.orchestrator.TaskPlan,
+        override val requestId: String? = null,
+        override val timings: RequestTimings? = null
+    ) : TurnOutcome(requestId, timings)
 }
 
 sealed class AssistantException(

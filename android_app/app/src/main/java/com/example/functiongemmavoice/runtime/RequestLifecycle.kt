@@ -1,5 +1,6 @@
 package com.example.functiongemmavoice.runtime
 
+import com.example.functiongemmavoice.runtime.intent.StructuredIntent
 import java.util.UUID
 
 object MonotonicClock {
@@ -10,6 +11,14 @@ object MonotonicClock {
             System.nanoTime() / 1_000_000L
         }
     }
+}
+
+enum class ErrorCategory {
+    INPUT,
+    MODEL,
+    EXECUTION,
+    CONCURRENCY,
+    RESOURCE
 }
 
 enum class RequestState {
@@ -37,12 +46,14 @@ sealed class AssistantError(
     val code: String,
     val userFacingMessage: String,
     val technicalDetails: String,
+    val category: ErrorCategory = ErrorCategory.EXECUTION,
     val isRecoverable: Boolean = true
 ) {
     data class InvalidInput(val reason: String) : AssistantError(
         "INVALID_INPUT",
         "Invalid command: $reason",
-        reason
+        reason,
+        ErrorCategory.INPUT
     )
 
     data class UnsupportedIntent(val reason: String) : AssistantError(
@@ -190,6 +201,7 @@ class RequestContext(
     val timings = RequestTimings(receivedMs = startTimeRealtimeMs)
     val parsedActions = mutableListOf<PreparedAction>()
     val executionResults = mutableListOf<Pair<String, ActionResult>>()
+    var structuredIntent: StructuredIntent? = null
     var error: AssistantError? = null
     var finalResponseText: String? = null
 

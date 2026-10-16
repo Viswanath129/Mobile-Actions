@@ -19,6 +19,12 @@ import org.json.JSONArray
 import org.json.JSONObject
 import android.Manifest
 import android.content.pm.PackageManager
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.Build
+import com.example.functiongemmavoice.runtime.capability.CapabilityRegistry
 import java.io.InputStreamReader
 
 data class PreparedAction(
@@ -48,7 +54,9 @@ sealed class ActionResult {
     }
 }
 
-class ActionRegistry(private val context: Context) {
+class ActionRegistry(val context: Context) {
+
+    val capabilityRegistry = CapabilityRegistry(context)
 
     private var flashCameraId: String? = null
     private val emailRegex = Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\$")
@@ -146,17 +154,35 @@ class ActionRegistry(private val context: Context) {
      * Rejects unknown tools, malformed arguments, non-https URLs, invalid phone/email, etc.
      */
     fun prepare(name: String, args: JSONObject): PreparedAction? {
+        val canonicalName: String
+        val canonicalArgs: JSONObject
+
+        if (name in specificAppTools) {
+            canonicalName = "open_app"
+            val appFromTool = specificAppTools[name] ?: "App"
+            canonicalArgs = JSONObject(args.toString()).apply {
+                if (!has("app_name") || optString("app_name").isBlank()) {
+                    put("app_name", appFromTool)
+                }
+            }
+        } else {
+            canonicalName = name
+            canonicalArgs = args
+        }
+
         val clean = JSONObject()
         val sensitive: Boolean
 
-        when (name) {
+        when (canonicalName) {
             // Flashlight
             "turn_on_flashlight", "turn_off_flashlight", "toggle_flashlight" -> {
                 sensitive = false
             }
 
-            // Settings
-            "open_wifi_settings", "open_bluetooth_pairing", "open_system_settings",
+            // Settings & Connectivity
+            "open_wifi_settings", "open_bluetooth_settings", "open_bluetooth_pairing",
+            "request_bluetooth_enable", "request_bluetooth_disable", "get_bluetooth_state", "get_wifi_state",
+            "open_system_settings",
             "open_battery_saver_settings", "open_storage_settings", "open_security_settings",
             "open_date_time_settings", "open_developer_options", "open_airplane_mode_settings",
             "open_mobile_data_settings", "open_nfc_settings", "open_accessibility_settings",
@@ -383,18 +409,22 @@ class ActionRegistry(private val context: Context) {
             }
         }
 
-        return PreparedAction(name, clean, "$name $clean", sensitive)
+        return PreparedAction(canonicalName, clean, "$canonicalName $clean", sensitive)
     }
 
-    /**
-     * Executes approved action via Android APIs or Intents.
-     */
     /**
      * Executes approved action via Android APIs or Intents.
      * Returns structured ActionResult with truthful execution status.
      */
     fun execute(name: String, a: JSONObject): ActionResult = try {
-        when (name) {
+        val canonicalName = if (name in specificAppTools) "open_app" else name
+        val canonicalArgs = if (name in specificAppTools && (!a.has("app_name") || a.optString("app_name").isBlank())) {
+            JSONObject(a.toString()).apply { put("app_name", specificAppTools[name] ?: "App") }
+        } else {
+            a
+        }
+
+        when (canonicalName) {
             "turn_on_flashlight" -> setFlashlight(true)
             "turn_off_flashlight" -> setFlashlight(false)
             "toggle_flashlight" -> toggleFlashlight()
@@ -403,9 +433,62 @@ class ActionRegistry(private val context: Context) {
                 context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 ActionResult.Success(name, "Opened Wi-Fi settings.")
             }
-            "open_bluetooth_pairing" -> {
+            "get_wifi_state" -> {
+                val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                val activeNetwork = cm?.activeNetwork
+                val caps = cm?.getNetworkCapabilities(activeNetwork)
+                val hasWifi = caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+                val status = if (hasWifi) "connected to Wi-Fi" else "not connected to Wi-Fi"
+                ActionResult.Success(name, "Wi-Fi is currently $status.")
+            }
+            "open_bluetooth_settings", "open_bluetooth_pairing" -> {
                 context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 ActionResult.Success(name, "Opened Bluetooth settings.")
+            }
+            "request_bluetooth_enable" -> {
+                val bm = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+                val adapter = bm?.adapter
+                if (adapter == null) {
+                    ActionResult.ExecutionFailed(name, "Bluetooth hardware is not available on this device.")
+                } else if (adapter.isEnabled) {
+                    ActionResult.Success(name, "Bluetooth is already enabled.")
+                } else {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                        context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                        ActionResult.PermissionDenied(name, Manifest.permission.BLUETOOTH_CONNECT)
+                    } else {
+                        try {
+                            val enableIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(enableIntent)
+                            ActionResult.Success(name, "Requested Bluetooth activation. Please allow the system prompt on your screen.")
+                        } catch (_: Throwable) {
+                            context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            ActionResult.Success(name, "Opened Bluetooth settings to enable Bluetooth.")
+                        }
+                    }
+                }
+            }
+            "request_bluetooth_disable" -> {
+                // On Android 13+ (API 33+), direct disable is blocked for 3rd-party apps.
+                // Truthfully explain limitation and launch Bluetooth settings.
+                context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                ActionResult.Success(name, "Android 13+ restricts third-party apps from turning off Bluetooth directly. Opened Bluetooth settings so you can toggle it off.")
+            }
+            "get_bluetooth_state" -> {
+                val bm = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+                val adapter = bm?.adapter
+                if (adapter == null) {
+                    ActionResult.ExecutionFailed(name, "Bluetooth hardware is not available on this device.")
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                    context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                    ActionResult.PermissionDenied(name, Manifest.permission.BLUETOOTH_CONNECT)
+                } else {
+                    val isEnabled = try { adapter.isEnabled } catch (_: Throwable) { false }
+                    val status = if (isEnabled) "enabled (ON)" else "disabled (OFF)"
+                    ActionResult.Success(name, "Bluetooth is currently $status.")
+                }
             }
             "open_system_settings" -> {
                 val section = a.optString("section").lowercase(java.util.Locale.ROOT)
@@ -793,6 +876,20 @@ class ActionRegistry(private val context: Context) {
     }
 
     companion object {
+        val specificAppTools = mapOf(
+            "open_whatsapp" to "WhatsApp",
+            "open_youtube" to "YouTube",
+            "open_chrome" to "Chrome",
+            "open_spotify" to "Spotify",
+            "open_camera" to "Camera",
+            "open_maps" to "Google Maps",
+            "open_photos" to "Photos",
+            "open_calculator" to "Calculator",
+            "open_gmail" to "Gmail",
+            "open_messages" to "Messages",
+            "open_phone" to "Phone"
+        )
+
         fun parseTimeStringToHourMinute(str: String): Pair<Int, Int>? {
             val clean = str.trim()
             val colonMatch = Regex("(\\d{1,2}):(\\d{2})\\s*(AM|PM)?", RegexOption.IGNORE_CASE).find(clean)

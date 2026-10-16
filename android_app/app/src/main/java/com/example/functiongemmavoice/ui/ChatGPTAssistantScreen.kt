@@ -3,6 +3,7 @@ package com.example.functiongemmavoice.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -162,6 +163,35 @@ fun ChatGPTAssistantScreen(
                         }
                     )
                 }
+
+                if (uiState.isBusy) {
+                    item(key = "thinking_orb_inline_indicator") {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color.White,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle),
+                            shadowElevation = 0.5.dp,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                ThinkingOrb(
+                                    state = uiState.activeOrbState,
+                                    size = 18.dp
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = uiState.activeStageLabel,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = TextSecondary
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
             // Jump to latest control if not at bottom
@@ -284,18 +314,16 @@ private fun ChatGPTHeader(
                             color = TextMain
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(7.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    when (uiState.statusState) {
-                                        AssistantStatusState.MODEL_READY -> PrimaryAccent
-                                        AssistantStatusState.PROCESSING -> BrandBlue
-                                        AssistantStatusState.MODEL_LOADING -> Color(0xFFF59E0B)
-                                        AssistantStatusState.MODEL_ERROR -> Color(0xFFEF4444)
-                                    }
-                                )
+                        ThinkingOrb(
+                            state = uiState.activeOrbState,
+                            size = 14.dp,
+                            tint = when (uiState.activeOrbState) {
+                                OrbState.IDLE -> PrimaryAccent
+                                OrbState.REASONING -> BrandBlue
+                                OrbState.WORKING -> Color(0xFF0284C7)
+                                OrbState.WAITING, OrbState.RETRYING -> Color(0xFFF59E0B)
+                                else -> BrandBlue
+                            }
                         )
                     }
 
@@ -442,6 +470,13 @@ private fun ChatMessageItem(
                             color = TextMain,
                             lineHeight = 22.sp
                         )
+
+                        if (message.taskPlan != null) {
+                            TaskPlanCard(
+                                plan = message.taskPlan,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
 
                         // Message footer actions (Copy, latency tag)
                         Row(
@@ -984,24 +1019,55 @@ private fun DiagnosticsDialog(
     uiState: AssistantUiState,
     onDismiss: () -> Unit
 ) {
+    val diag = uiState.diagnostics
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Runtime Diagnostics") },
+        title = {
+            Text(
+                "Runtime Diagnostics & Telemetry",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Model: ${uiState.modelName}", fontSize = 12.sp)
-                Text("Context Budget: 4096 tokens", fontSize = 12.sp)
-                uiState.budgetInfo?.let { b ->
-                    Text("Remaining Budget: ~${b.remainingBudget} tokens", fontSize = 12.sp)
-                    Text("Schemas: ${b.estimatedSchemaTokens} tokens (38 tools)", fontSize = 12.sp)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text("• Engine Status: ${uiState.statusLabel}", fontSize = 11.sp, color = TextSecondary)
+                Text("• Cold Engine Startup: ${uiState.coldModelLoadDurationMs ?: "N/A"}ms (One-time load)", fontSize = 11.sp, color = TextSecondary)
+                Text("• Latest Request Duration: ${uiState.lastExecutionDurationMs ?: "N/A"}ms", fontSize = 11.sp, color = BrandBlue)
+                Text("• Active Request ID: ${diag.activeRequestId?.take(8) ?: "None"}", fontSize = 11.sp, color = TextSecondary)
+                Text("• Lifecycle State: ${diag.lifecycleState}", fontSize = 11.sp, color = if (diag.lifecycleState == "FAILED") ErrorText else BrandBlue)
+                Text("• Selected Route: ${diag.selectedRoute}", fontSize = 11.sp, color = TextMain)
+                Text("• Intent Domain: ${diag.intentDomain}", fontSize = 11.sp, color = TextSecondary)
+                Text("• Canonical Action: ${diag.canonicalAction} (Target: ${diag.target})", fontSize = 11.sp, color = TextMain)
+                Text("• Parameters: ${diag.toolParameters}", fontSize = 10.sp, color = TextSecondary)
+                Text("• Stage Timings: ${diag.stageTimings}", fontSize = 11.sp, color = BrandBlue)
+                Text("• Context Budget: ${diag.contextTokens}", fontSize = 11.sp, color = TextSecondary)
+                Text("• Tool Capabilities: ${diag.usableActions} usable / ${diag.registeredActions} registered", fontSize = 11.sp, color = TextMain)
+                Text("• System Health: ${diag.capabilityStatus}", fontSize = 11.sp, color = SuccessText)
+                if (diag.lastErrorCode != null) {
+                    Text("• Recent Error Code: ${diag.lastErrorCode}", fontSize = 11.sp, color = ErrorText)
                 }
-                Text("Speech Engine: ${uiState.speechEngineStatus}", fontSize = 12.sp)
-                if (uiState.lastExecutionDurationMs != null) {
-                    Text("Last Latency: ${uiState.lastExecutionDurationMs}ms", fontSize = 12.sp)
-                }
-                if (uiState.developerDiagnostics != null) {
-                    Divider()
-                    Text("Error Trace: ${uiState.developerDiagnostics.take(200)}…", fontSize = 10.sp, color = ErrorText)
+                if (diag.developerTrace != null) {
+                    Divider(modifier = Modifier.padding(vertical = 4.dp))
+                    Text("Developer Trace:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Surface(
+                        color = Color(0xFFF1F5F9),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = diag.developerTrace,
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.padding(6.dp),
+                            color = TextMain
+                        )
+                    }
                 }
             }
         },
@@ -1009,4 +1075,117 @@ private fun DiagnosticsDialog(
             TextButton(onClick = onDismiss) { Text("Close") }
         }
     )
+}
+
+@Composable
+fun TaskPlanCard(
+    plan: com.example.functiongemmavoice.runtime.orchestrator.TaskPlan,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = Color(0xFFF8FAFC),
+        shape = RoundedCornerShape(10.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Multi-Step Plan (${plan.completedStepCount}/${plan.steps.size})",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = BrandBlue
+                )
+                val (badgeBg, badgeText) = when (plan.overallStatus) {
+                    com.example.functiongemmavoice.runtime.orchestrator.PlanStatus.COMPLETED -> Color(0xFFEBF7F2) to SuccessText
+                    com.example.functiongemmavoice.runtime.orchestrator.PlanStatus.PARTIAL_SUCCESS -> Color(0xFFFEF3C7) to Color(0xFFD97706)
+                    com.example.functiongemmavoice.runtime.orchestrator.PlanStatus.EXECUTING -> Color(0xFFEFF6FF) to BrandBlue
+                    com.example.functiongemmavoice.runtime.orchestrator.PlanStatus.CANCELLED -> Color(0xFFF3F4F6) to TextSecondary
+                    else -> Color(0xFFFEF2F2) to ErrorText
+                }
+                Surface(
+                    color = badgeBg,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = plan.overallStatus.name,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = badgeText,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Goal: \"${plan.userGoal}\"",
+                fontSize = 11.sp,
+                color = TextSecondary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+            HorizontalDivider(color = Color(0xFFE2E8F0))
+            Spacer(modifier = Modifier.height(4.dp))
+
+            plan.steps.forEachIndexed { index, step ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (step.status == com.example.functiongemmavoice.runtime.orchestrator.StepStatus.RUNNING) {
+                        ThinkingOrb(
+                            state = OrbState.WORKING,
+                            size = 14.dp,
+                            tint = BrandBlue
+                        )
+                    } else {
+                        val stepIcon = when (step.status) {
+                            com.example.functiongemmavoice.runtime.orchestrator.StepStatus.SUCCESS -> Icons.Default.CheckCircle
+                            com.example.functiongemmavoice.runtime.orchestrator.StepStatus.FAILED -> Icons.Default.Cancel
+                            com.example.functiongemmavoice.runtime.orchestrator.StepStatus.SKIPPED -> Icons.Default.RemoveCircleOutline
+                            com.example.functiongemmavoice.runtime.orchestrator.StepStatus.CANCELLED -> Icons.Default.Block
+                            else -> Icons.Default.Schedule
+                        }
+                        val stepColor = when (step.status) {
+                            com.example.functiongemmavoice.runtime.orchestrator.StepStatus.SUCCESS -> SuccessText
+                            com.example.functiongemmavoice.runtime.orchestrator.StepStatus.FAILED -> ErrorText
+                            else -> TextMuted
+                        }
+                        Icon(
+                            imageVector = stepIcon,
+                            contentDescription = null,
+                            tint = stepColor,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Step ${index + 1}: ${step.actionId}",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = TextMain,
+                        modifier = Modifier.weight(1f)
+                    )
+                    step.executionResult?.let { res ->
+                        Text(
+                            text = res.userFacingMessage().take(28),
+                            fontSize = 9.sp,
+                            color = TextSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+    }
 }

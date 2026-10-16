@@ -515,4 +515,192 @@ class ActionRegistryTest {
         assertTrue(playMusic is com.example.functiongemmavoice.runtime.FastPathDecision.Unsupported)
         assertTrue((playMusic as com.example.functiongemmavoice.runtime.FastPathDecision.Unsupported).reason.contains("playback"))
     }
+
+    // --- MANDATORY TEST MATRIX (OBJECTIVE 11) ---
+
+    @Test
+    fun testReq1_OpenBluetoothRoutesToSettingsNavigation() {
+        val registry = ActionRegistry(MockContext())
+        val router = com.example.functiongemmavoice.runtime.DeterministicCommandRouter(registry)
+
+        val enDecision = router.route("open bluetooth")
+        assertTrue(enDecision is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        assertEquals("open_bluetooth_settings", (enDecision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0].name)
+
+        val teDecision = router.route("బ్లూటూత్ ఓపెన్ చెయ్")
+        assertTrue(teDecision is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        assertEquals("open_bluetooth_settings", (teDecision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0].name)
+    }
+
+    @Test
+    fun testReq2_TurnOnBluetoothRoutesToActivationRequest() {
+        val registry = ActionRegistry(MockContext())
+        val router = com.example.functiongemmavoice.runtime.DeterministicCommandRouter(registry)
+
+        val enDecision = router.route("turn on bluetooth")
+        assertTrue(enDecision is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        assertEquals("request_bluetooth_enable", (enDecision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0].name)
+
+        val switchOnDecision = router.route("switch bluetooth on")
+        assertTrue(switchOnDecision is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        assertEquals("request_bluetooth_enable", (switchOnDecision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0].name)
+
+        val teDecision = router.route("బ్లూటూత్ ఆన్ చెయ్")
+        assertTrue(teDecision is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        assertEquals("request_bluetooth_enable", (teDecision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0].name)
+    }
+
+    @Test
+    fun testReq3_TurnOffBluetoothExplainsRestrictionAndOpensSettings() {
+        val registry = ActionRegistry(MockContext())
+        val router = com.example.functiongemmavoice.runtime.DeterministicCommandRouter(registry)
+
+        val enDecision = router.route("turn bluetooth off")
+        assertTrue(enDecision is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        assertEquals("request_bluetooth_disable", (enDecision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0].name)
+
+        // Verify execution never falsely claims Bluetooth was turned off directly
+        val execResult = registry.execute("request_bluetooth_disable", JSONObject())
+        assertTrue(execResult is com.example.functiongemmavoice.runtime.ActionResult.Success)
+        assertTrue(execResult.userFacingMessage().contains("Android 13+ restricts"))
+    }
+
+    @Test
+    fun testReq4_BluetoothStatusCheckDoesNotInvokeMutation() {
+        val registry = ActionRegistry(MockContext())
+        val router = com.example.functiongemmavoice.runtime.DeterministicCommandRouter(registry)
+
+        val decision = router.route("is bluetooth enabled?")
+        assertTrue(decision is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        val action = (decision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0]
+        assertEquals("get_bluetooth_state", action.name)
+        assertNotEquals("request_bluetooth_enable", action.name)
+        assertNotEquals("request_bluetooth_disable", action.name)
+    }
+
+    @Test
+    fun testReq5_BluetoothSettingsNavigationDoesNotInvokeActivation() {
+        val registry = ActionRegistry(MockContext())
+        val router = com.example.functiongemmavoice.runtime.DeterministicCommandRouter(registry)
+
+        val decision = router.route("take me to bluetooth settings")
+        assertTrue(decision is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        assertEquals("open_bluetooth_settings", (decision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0].name)
+    }
+
+    @Test
+    fun testReq6_ExplicitDoNotTurnOnInstructionIsRespected() {
+        val registry = ActionRegistry(MockContext())
+        val router = com.example.functiongemmavoice.runtime.DeterministicCommandRouter(registry)
+
+        // "Do not turn on Bluetooth; open its settings"
+        val decision = router.route("do not turn on bluetooth ; open its settings")
+        assertTrue(decision is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        val action = (decision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0]
+        assertEquals("open_bluetooth_settings", action.name)
+        assertNotEquals("request_bluetooth_enable", action.name)
+
+        // "Open bluetooth settings, but do not change anything"
+        val noChange = router.route("open bluetooth settings ; do not change anything")
+        assertTrue(noChange is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        assertEquals("open_bluetooth_settings", (noChange as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0].name)
+    }
+
+    @Test
+    fun testReq7_BatteryQueryCannotInvokeFlashlight() {
+        val registry = ActionRegistry(MockContext())
+        val router = com.example.functiongemmavoice.runtime.DeterministicCommandRouter(registry)
+
+        val batteryDecision = router.route("what is my battery level?")
+        assertTrue(batteryDecision is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        val action = (batteryDecision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0]
+        assertEquals("get_battery_status", action.name)
+        assertNotEquals("turn_on_flashlight", action.name)
+        assertNotEquals("toggle_flashlight", action.name)
+    }
+
+    @Test
+    fun testReq8_FlashlightCommandCannotInvokeTimer() {
+        val registry = ActionRegistry(MockContext())
+        val router = com.example.functiongemmavoice.runtime.DeterministicCommandRouter(registry)
+
+        val flashDecision = router.route("turn on the flashlight")
+        assertTrue(flashDecision is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        val action = (flashDecision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0]
+        assertEquals("turn_on_flashlight", action.name)
+        assertNotEquals("create_timer", action.name)
+        assertFalse(action.args.has("duration_seconds"))
+    }
+
+    @Test
+    fun testReq9_WifiAndBluetoothDoNotExchangeResults() {
+        val registry = ActionRegistry(MockContext())
+        val router = com.example.functiongemmavoice.runtime.DeterministicCommandRouter(registry)
+
+        val wifiDecision = router.route("open wifi settings")
+        assertTrue(wifiDecision is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        assertEquals("open_wifi_settings", (wifiDecision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0].name)
+
+        val btDecision = router.route("open bluetooth settings")
+        assertTrue(btDecision is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        assertEquals("open_bluetooth_settings", (btDecision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0].name)
+        assertNotEquals((wifiDecision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0].name,
+            (btDecision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0].name)
+    }
+
+    @Test
+    fun testReq10_MultiActionIndependentTracking() {
+        val registry = ActionRegistry(MockContext())
+        val router = com.example.functiongemmavoice.runtime.DeterministicCommandRouter(registry)
+
+        // "turn on bluetooth and open youtube"
+        val decision = router.route("turn on bluetooth and open youtube")
+        assertTrue(decision is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        val actions = (decision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions
+        assertEquals(2, actions.size)
+        assertEquals("request_bluetooth_enable", actions[0].name)
+        assertEquals("open_app", actions[1].name)
+        assertEquals("YouTube", actions[1].args.getString("app_name"))
+    }
+
+    @Test
+    fun testReq11_CapabilityRegistryConsistencyCheck() {
+        val registry = ActionRegistry(MockContext())
+        val caps = registry.capabilityRegistry.all()
+        assertTrue("At least 30 core tools registered", caps.size >= 30)
+
+        // Verify Bluetooth definitions exist
+        assertNotNull(registry.capabilityRegistry.get("open_bluetooth_settings"))
+        assertNotNull(registry.capabilityRegistry.get("request_bluetooth_enable"))
+        assertNotNull(registry.capabilityRegistry.get("request_bluetooth_disable"))
+        assertNotNull(registry.capabilityRegistry.get("get_bluetooth_state"))
+    }
+
+    @Test
+    fun testReq12_PureNegationFlashlightRejection() {
+        val registry = ActionRegistry(MockContext())
+        val router = com.example.functiongemmavoice.runtime.DeterministicCommandRouter(registry)
+
+        val decision = router.route("do not turn on the flashlight")
+        assertTrue(decision is com.example.functiongemmavoice.runtime.FastPathDecision.Negated)
+    }
+
+    @Test
+    fun testReq13_TeluguVoiceVariantsForDeviceControls() {
+        val registry = ActionRegistry(MockContext())
+        val router = com.example.functiongemmavoice.runtime.DeterministicCommandRouter(registry)
+
+        val flashTe = router.route("లైట్ ఆన్ చెయ్")
+        assertTrue(flashTe is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        assertEquals("turn_on_flashlight", (flashTe as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0].name)
+
+        val flashOffTe = router.route("లైట్ ఆఫ్ చెయ్")
+        assertTrue(flashOffTe is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        assertEquals("turn_off_flashlight", (flashOffTe as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0].name)
+
+        val batteryTe = router.route("నా ఫోన్ బ్యాటరీ ఎంత ఉంది")
+        assertTrue(batteryTe is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        assertEquals("get_battery_status", (batteryTe as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0].name)
+    }
 }
+

@@ -14,6 +14,11 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
+import com.example.functiongemmavoice.runtime.orchestrator.TaskPlan
+import com.example.functiongemmavoice.runtime.orchestrator.TaskStep
+import com.example.functiongemmavoice.runtime.orchestrator.TaskPlanScheduler
+import com.example.functiongemmavoice.runtime.orchestrator.PlanValidator
+import com.example.functiongemmavoice.runtime.laya.LocalLayaDecisionAdapter
 
 class InferenceEngineManager private constructor(private val appContext: Context) {
 
@@ -26,6 +31,9 @@ class InferenceEngineManager private constructor(private val appContext: Context
 
     val actionRegistry = ActionRegistry(appContext)
     val fastRouter = DeterministicCommandRouter(actionRegistry)
+    val planValidator = PlanValidator(actionRegistry.capabilityRegistry, actionRegistry)
+    val planScheduler = TaskPlanScheduler(actionRegistry, planValidator)
+    val layaEngine = LocalLayaDecisionAdapter(actionRegistry.capabilityRegistry)
 
     companion object {
         @Volatile
@@ -156,9 +164,16 @@ class InferenceEngineManager private constructor(private val appContext: Context
             }
             context.normalizedInput = normalized
 
-            // Stage 2: Routing via Deterministic Fast Path
+            // Stage 2: Routing via Deterministic Fast Path & Structured Intent
             context.transitionTo(RequestState.ROUTING)
-            val decision = fastRouter.route(normalized)
+            val decision = fastRouter.route(normalized, context.requestId)
+            context.structuredIntent = when (decision) {
+                is FastPathDecision.DirectAction -> decision.intent
+                is FastPathDecision.Negated -> decision.intent
+                is FastPathDecision.Ambiguous -> decision.intent
+                is FastPathDecision.Unsupported -> decision.intent
+                is FastPathDecision.FallbackToModel -> decision.intent
+            }
 
             when (decision) {
                 is FastPathDecision.DirectAction -> {
@@ -171,6 +186,34 @@ class InferenceEngineManager private constructor(private val appContext: Context
                     if (needsConfirmation != null) {
                         context.transitionTo(RequestState.NEEDS_CONFIRMATION)
                         outcomes.add(TurnOutcome.ConfirmationNeeded(needsConfirmation, context.requestId, context.timings))
+                        return@withContext outcomes
+                    }
+
+                    if (decision.actions.size > 1) {
+                        val steps = decision.actions.mapIndexed { idx, act ->
+                            TaskStep(
+                                stepId = "step-$idx",
+                                actionId = act.name,
+                                displayName = act.summary,
+                                validatedArguments = act.args,
+                                dependsOn = if (idx > 0 && decision.intent?.dependencies?.isNotEmpty() == true) listOf("step-${idx - 1}") else emptyList()
+                            )
+                        }
+                        val plan = TaskPlan(
+                            requestId = context.requestId,
+                            userGoal = context.rawInput,
+                            steps = steps
+                        )
+                        context.transitionTo(RequestState.EXECUTING)
+                        planScheduler.executePlan(plan)
+                        for (st in plan.steps) {
+                            st.executionResult?.let { res ->
+                                context.executionResults.add(st.actionId to res)
+                            }
+                        }
+                        context.transitionTo(RequestState.VERIFYING)
+                        context.markCompleted()
+                        outcomes.add(TurnOutcome.MultiStepPlanOutcome(plan, context.requestId, context.timings))
                         return@withContext outcomes
                     }
 
@@ -270,7 +313,7 @@ class InferenceEngineManager private constructor(private val appContext: Context
                                 }
                             }
 
-                            // Check for hallucination / table token poisoning
+                            // Check for hallucination / table token poisoning or unexecuted tool call syntax
                             val isHallucination = cleanText.contains("<tr>", ignoreCase = true) ||
                                 cleanText.contains("Invalid argument:", ignoreCase = true) ||
                                 cleanText.contains("<start_of_turn>", ignoreCase = true) ||
@@ -280,6 +323,19 @@ class InferenceEngineManager private constructor(private val appContext: Context
                             if (isHallucination) {
                                 createNewConversationInternal()
 
+                                // Attempt controlled recovery via deterministic fast-path before failing
+                                val recovery = fastRouter.route(normalized, context.requestId)
+                                if (recovery is FastPathDecision.DirectAction) {
+                                    for (act in recovery.actions) {
+                                        val execResult = actionRegistry.execute(act.name, act.args)
+                                        context.executionResults.add(act.name to execResult)
+                                        outcomes.add(TurnOutcome.ActionExecuted(act.name, execResult, context.requestId, context.timings))
+                                    }
+                                    context.transitionTo(RequestState.VERIFYING)
+                                    context.markCompleted()
+                                    return@withContext outcomes
+                                }
+
                                 cleanText = cleanText
                                     .replace("<start_function_call>", "")
                                     .replace("<end_function_call>", "")
@@ -287,9 +343,10 @@ class InferenceEngineManager private constructor(private val appContext: Context
                                     .replace("<end_of_tool_call>", "")
                                     .replace("<start_of_turn>", "")
                                     .replace("<end_of_turn>", "")
+                                    .replace(Regex("""call:[a-zA-Z0-9_]+(\{[^}]*\})?"""), "")
                                     .replace(Regex("<[^>]*>"), "")
                                     .trim()
-                                if (cleanText.isBlank()) {
+                                if (cleanText.isBlank() || cleanText.contains("call:")) {
                                     cleanText = "I could not complete that request. Please try again."
                                 }
                             }

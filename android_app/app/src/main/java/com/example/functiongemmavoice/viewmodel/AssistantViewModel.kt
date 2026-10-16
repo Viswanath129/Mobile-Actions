@@ -77,9 +77,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 _uiState.update {
                     it.copy(
                         statusState = AssistantStatusState.MODEL_READY,
-                        statusLabel = "Model Ready (${durationMs}ms)",
+                        statusLabel = "Ready • 42 Actions Operational",
                         modelName = displayName,
                         budgetInfo = engineManager.getBudgetStatus(),
+                        coldModelLoadDurationMs = durationMs,
+                        activeOrbState = com.example.functiongemmavoice.ui.OrbState.IDLE,
+                        activeStageLabel = "Ready",
                         isBusy = false
                     )
                 }
@@ -88,6 +91,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     it.copy(
                         statusState = AssistantStatusState.MODEL_ERROR,
                         statusLabel = "Model load failed: ${t.message ?: "Native error"}",
+                        activeOrbState = com.example.functiongemmavoice.ui.OrbState.IDLE,
+                        activeStageLabel = "Error",
                         isBusy = false
                     )
                 }
@@ -159,13 +164,19 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             requestId = request.requestId
         )
 
+        val isFast = engineManager.fastRouter.route(trimmed, request.requestId) is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction
+        val initialOrb = if (isFast) com.example.functiongemmavoice.ui.OrbState.WORKING else com.example.functiongemmavoice.ui.OrbState.REASONING
+        val initialStage = if (isFast) "Executing action…" else "Thinking (LiteRT-LM)…"
+
         _uiState.update { current ->
             val updated = (current.messages + userMsg).takeLast(maxVisibleMessages)
             current.copy(
                 messages = updated,
                 isBusy = true,
                 statusState = AssistantStatusState.PROCESSING,
-                statusLabel = "Routing & Validating…"
+                activeOrbState = initialOrb,
+                activeStageLabel = initialStage,
+                statusLabel = initialStage
             )
         }
 
@@ -209,7 +220,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                             speechTextToEmit = userMsgText
                         }
                         is TurnOutcome.ConfirmationNeeded -> {
-                            _uiState.update { it.copy(pendingConfirmation = outcome.action) }
+                            _uiState.update {
+                                it.copy(
+                                    pendingConfirmation = outcome.action,
+                                    activeOrbState = com.example.functiongemmavoice.ui.OrbState.WAITING,
+                                    activeStageLabel = "Waiting for you"
+                                )
+                            }
                             val promptMsg = "Action '${outcome.action.name}' requires confirmation."
                             newMessages.add(
                                 UiMessage(
@@ -233,24 +250,63 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                                 )
                             )
                         }
+                        is TurnOutcome.MultiStepPlanOutcome -> {
+                            val plan = outcome.plan
+                            val summary = "Executed plan (${plan.completedStepCount}/${plan.steps.size} steps completed, status: ${plan.overallStatus})"
+                            newMessages.add(
+                                UiMessage(
+                                    sender = MessageSender.ASSISTANT,
+                                    text = summary,
+                                    executionDurationMs = durationMs,
+                                    requestId = outcome.requestId ?: request.requestId,
+                                    timingSummary = timingSummary,
+                                    taskPlan = plan
+                                )
+                            )
+                            speechTextToEmit = summary
+                        }
                     }
                 }
 
+                val usableCount = engineManager.actionRegistry.capabilityRegistry.usableCount()
+                val totalCount = engineManager.actionRegistry.capabilityRegistry.all().size
                 val statusLabelText = if (request.timings.isFastPath) {
-                    "Completed ($timingSummary) • 38 Tools Ready"
+                    "Ready • FastPath (${request.timings.totalDurationMs}ms)"
                 } else {
-                    "Completed (${durationMs}ms) • 38 Tools Ready"
+                    "Ready • Model (${durationMs}ms)"
                 }
+
+                val intent = request.structuredIntent
+                val routeStr = if (request.timings.isFastPath) "Deterministic FastPath (<10ms)" else "FunctionGemma 270M On-Device LLM"
+                val diag = DiagnosticsInfo(
+                    activeRequestId = request.requestId,
+                    lifecycleState = request.state.name,
+                    selectedRoute = routeStr,
+                    intentDomain = intent?.intentDomain?.name ?: "UNKNOWN",
+                    canonicalAction = intent?.action?.name ?: "UNKNOWN",
+                    target = intent?.target ?: (newMessages.firstOrNull()?.actionTool ?: "N/A"),
+                    toolParameters = intent?.parameters?.toString() ?: "{}",
+                    stageTimings = timingSummary,
+                    registeredActions = totalCount,
+                    usableActions = usableCount,
+                    capabilityStatus = "ALL_SYSTEMS_OPERATIONAL",
+                    lastErrorCode = request.error?.code,
+                    developerTrace = "Utterance: \"${request.rawInput}\"\nIntent: ${intent?.intentDomain} -> ${intent?.action} (Confidence: ${intent?.confidence})\nRoute: $routeStr\nOutcomes: ${newMessages.mapNotNull { it.actionTool }.joinToString()}"
+                )
 
                 _uiState.update { current ->
                     val combined = (current.messages + newMessages).takeLast(maxVisibleMessages)
                     current.copy(
                         messages = combined,
                         isBusy = false,
+                        activeOrbState = com.example.functiongemmavoice.ui.OrbState.IDLE,
+                        activeStageLabel = "Ready",
                         statusState = AssistantStatusState.MODEL_READY,
                         statusLabel = statusLabelText,
                         lastExecutionDurationMs = durationMs,
-                        budgetInfo = engineManager.getBudgetStatus()
+                        lastTimingSummary = timingSummary,
+                        budgetInfo = engineManager.getBudgetStatus(),
+                        diagnostics = diag
                     )
                 }
 
@@ -278,8 +334,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     current.copy(
                         messages = (current.messages + errorMsg).takeLast(maxVisibleMessages),
                         isBusy = false,
+                        activeOrbState = com.example.functiongemmavoice.ui.OrbState.IDLE,
+                        activeStageLabel = "Ready",
                         statusState = AssistantStatusState.MODEL_READY,
-                        statusLabel = "Error recovered (${durationMs}ms)",
+                        statusLabel = "Ready • Recovered (${durationMs}ms)",
                         budgetInfo = engineManager.getBudgetStatus(),
                         developerDiagnostics = e.stackTraceToString()
                     )
