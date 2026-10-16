@@ -71,15 +71,15 @@ class DeterministicCommandRouter(private val actionRegistry: ActionRegistry) {
             }
         }
 
-        // 3. Guard against explicitly unsupported third-party intents
-        if (lower.contains("spotify") || lower.contains("netflix") || lower.contains("uber") || lower.contains("swiggy") || lower.contains("zomato")) {
+        // 3. Guard against explicitly unsupported third-party intents (media playback controls or booking)
+        if ((lower.contains("play") && lower.contains("spotify")) || lower.contains("netflix") || lower.contains("uber") || lower.contains("swiggy") || lower.contains("zomato")) {
             val service = when {
-                lower.contains("spotify") -> "Spotify"
-                lower.contains("netflix") -> "Netflix"
-                lower.contains("uber") -> "Uber"
-                else -> "The requested third-party service"
+                lower.contains("spotify") -> "Spotify playback control is not supported directly. You can say 'Open Spotify' to launch the app."
+                lower.contains("netflix") -> "Netflix integration is not currently supported on this device."
+                lower.contains("uber") -> "Uber ride booking is not currently supported on this device."
+                else -> "The requested third-party service is not currently supported."
             }
-            return FastPathDecision.Unsupported("$service playback or integration is not currently supported on this device.")
+            return FastPathDecision.Unsupported(service)
         }
 
         // 4. Flashlight Turn ON
@@ -112,19 +112,68 @@ class DeterministicCommandRouter(private val actionRegistry: ActionRegistry) {
             return if (action != null) FastPathDecision.DirectAction(listOf(action)) else FastPathDecision.FallbackToModel
         }
 
-        // 9. System Settings
+        // 9. Sound & Volume Settings
+        if (lower.contains("sound settings") || lower.contains("volume settings") || lower == "open volume" || lower == "open sound") {
+            val action = actionRegistry.prepare("open_sound_settings", JSONObject())
+            return if (action != null) FastPathDecision.DirectAction(listOf(action)) else FastPathDecision.FallbackToModel
+        }
+
+        // 10. Display & Brightness Settings
+        if (lower.contains("display settings") || lower.contains("brightness settings") || lower == "open display") {
+            val action = actionRegistry.prepare("open_display_settings", JSONObject())
+            return if (action != null) FastPathDecision.DirectAction(listOf(action)) else FastPathDecision.FallbackToModel
+        }
+
+        // 11. Location Settings
+        if (lower.contains("location settings") || lower == "open location") {
+            val action = actionRegistry.prepare("open_location_settings", JSONObject())
+            return if (action != null) FastPathDecision.DirectAction(listOf(action)) else FastPathDecision.FallbackToModel
+        }
+
+        // 12. Airplane Mode Settings
+        if (lower.contains("airplane mode") || lower.contains("aeroplane mode") || lower.contains("flight mode")) {
+            val action = actionRegistry.prepare("open_airplane_mode_settings", JSONObject())
+            return if (action != null) FastPathDecision.DirectAction(listOf(action)) else FastPathDecision.FallbackToModel
+        }
+
+        // 13. Do Not Disturb Settings
+        if (lower.contains("do not disturb") || lower.contains("dnd settings") || lower == "open dnd") {
+            val action = actionRegistry.prepare("open_dnd_settings", JSONObject())
+            return if (action != null) FastPathDecision.DirectAction(listOf(action)) else FastPathDecision.FallbackToModel
+        }
+
+        // 14. System Settings
         if (isSettingsQuery(lower)) {
             val action = actionRegistry.prepare("open_system_settings", JSONObject())
             return if (action != null) FastPathDecision.DirectAction(listOf(action)) else FastPathDecision.FallbackToModel
         }
 
-        // 10. Time & Date
+        // 15. Time & Date
         if (isTimeDateQuery(lower)) {
             val action = actionRegistry.prepare("check_current_time_date", JSONObject())
             return if (action != null) FastPathDecision.DirectAction(listOf(action)) else FastPathDecision.FallbackToModel
         }
 
-        // 11. Timer commands
+        // 16. Calendar
+        if (lower == "open calendar" || lower == "calendar" || lower == "launch calendar") {
+            val action = actionRegistry.prepare("open_calendar", JSONObject())
+            return if (action != null) FastPathDecision.DirectAction(listOf(action)) else FastPathDecision.FallbackToModel
+        }
+
+        // 17. Clock
+        if (lower == "open clock" || lower == "clock" || lower == "open stopwatch" || lower == "stopwatch") {
+            val action = actionRegistry.prepare("open_clock_stopwatch", JSONObject())
+            return if (action != null) FastPathDecision.DirectAction(listOf(action)) else FastPathDecision.FallbackToModel
+        }
+
+        // 18. Share Text
+        if (lower.startsWith("share ") || lower == "share text") {
+            val textToShare = lower.removePrefix("share ").trim().ifBlank { "FunctionGemma Assistant" }
+            val action = actionRegistry.prepare("share_text", JSONObject().put("text", textToShare))
+            return if (action != null) FastPathDecision.DirectAction(listOf(action)) else FastPathDecision.FallbackToModel
+        }
+
+        // 19. Timer commands
         if (lower.contains("timer") || lower.contains("టైమర్")) {
             val durationSec = ActionRegistry.parseDurationToSeconds(lower)
             if (durationSec <= 0) {
@@ -136,7 +185,7 @@ class DeterministicCommandRouter(private val actionRegistry: ActionRegistry) {
             return if (action != null) FastPathDecision.DirectAction(listOf(action)) else FastPathDecision.FallbackToModel
         }
 
-        // 12. App Launching (YouTube, Chrome, Camera, Maps, Calculator)
+        // 20. App Launching (YouTube, Spotify, Chrome, Camera, Maps, Photos, Phone, Messages, Calculator)
         val appDecision = matchAppLaunch(lower)
         if (appDecision != null) {
             return appDecision
@@ -203,10 +252,19 @@ class DeterministicCommandRouter(private val actionRegistry: ActionRegistry) {
     private fun matchAppLaunch(s: String): FastPathDecision? {
         val supportedApps = mapOf(
             "youtube" to "YouTube",
+            "spotify" to "Spotify",
             "chrome" to "Chrome",
             "camera" to "Camera",
             "maps" to "Maps",
             "google maps" to "Maps",
+            "photos" to "Photos",
+            "gallery" to "Photos",
+            "phone" to "Phone",
+            "dialer" to "Phone",
+            "messages" to "Messages",
+            "sms" to "Messages",
+            "clock" to "Clock",
+            "calendar" to "Calendar",
             "calculator" to "Calculator"
         )
 

@@ -441,4 +441,78 @@ class ActionRegistryTest {
             assertTrue(err.technicalDetails.isNotBlank())
         }
     }
+
+    @Test
+    fun testNewSettingsToolsPreparation() {
+        val registry = ActionRegistry(MockContext())
+
+        val soundAction = registry.prepare("open_sound_settings", JSONObject())
+        assertNotNull(soundAction)
+        assertEquals("open_sound_settings", soundAction?.name)
+        assertFalse(soundAction!!.requiresConfirmation)
+
+        val displayAction = registry.prepare("open_display_settings", JSONObject())
+        assertNotNull(displayAction)
+        assertEquals("open_display_settings", displayAction?.name)
+
+        val locationAction = registry.prepare("open_location_settings", JSONObject())
+        assertNotNull(locationAction)
+        assertEquals("open_location_settings", locationAction?.name)
+
+        val dndAction = registry.prepare("open_dnd_settings", JSONObject())
+        assertNotNull(dndAction)
+        assertEquals("open_dnd_settings", dndAction?.name)
+
+        val calendarAction = registry.prepare("open_calendar", JSONObject())
+        assertNotNull(calendarAction)
+        assertEquals("open_calendar", calendarAction?.name)
+
+        val shareAction = registry.prepare("share_text", JSONObject("""{"text":"Hello from FunctionGemma"}"""))
+        assertNotNull(shareAction)
+        assertEquals("Hello from FunctionGemma", shareAction!!.args.getString("text"))
+    }
+
+    @Test
+    fun testDeterministicRoutingForNewQuickActions() {
+        val registry = ActionRegistry(MockContext())
+        val router = com.example.functiongemmavoice.runtime.DeterministicCommandRouter(registry)
+
+        val soundDecision = router.route("open sound settings")
+        assertTrue(soundDecision is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        assertEquals("open_sound_settings", (soundDecision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0].name)
+
+        val displayDecision = router.route("open display settings")
+        assertTrue(displayDecision is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        assertEquals("open_display_settings", (displayDecision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0].name)
+
+        val locationDecision = router.route("open location settings")
+        assertTrue(locationDecision is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        assertEquals("open_location_settings", (locationDecision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0].name)
+
+        val dndDecision = router.route("open do not disturb settings")
+        assertTrue(dndDecision is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        assertEquals("open_dnd_settings", (dndDecision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0].name)
+
+        val calendarDecision = router.route("open calendar")
+        assertTrue(calendarDecision is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        assertEquals("open_calendar", (calendarDecision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0].name)
+    }
+
+    @Test
+    fun testSpotifyAppLaunchVsPlaybackGuard() {
+        val registry = ActionRegistry(MockContext())
+        val router = com.example.functiongemmavoice.runtime.DeterministicCommandRouter(registry)
+
+        // "open spotify" should route to open_app(app_name="Spotify")
+        val openSpotify = router.route("open spotify")
+        assertTrue(openSpotify is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        val action = (openSpotify as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0]
+        assertEquals("open_app", action.name)
+        assertEquals("Spotify", action.args.getString("app_name"))
+
+        // "play Taylor Swift on spotify" must be caught by unsupported playback guard
+        val playMusic = router.route("play songs on spotify")
+        assertTrue(playMusic is com.example.functiongemmavoice.runtime.FastPathDecision.Unsupported)
+        assertTrue((playMusic as com.example.functiongemmavoice.runtime.FastPathDecision.Unsupported).reason.contains("playback"))
+    }
 }

@@ -159,7 +159,9 @@ class ActionRegistry(private val context: Context) {
             "open_wifi_settings", "open_bluetooth_pairing", "open_system_settings",
             "open_battery_saver_settings", "open_storage_settings", "open_security_settings",
             "open_date_time_settings", "open_developer_options", "open_airplane_mode_settings",
-            "open_mobile_data_settings", "open_nfc_settings", "open_accessibility_settings" -> {
+            "open_mobile_data_settings", "open_nfc_settings", "open_accessibility_settings",
+            "open_sound_settings", "open_volume_settings", "open_display_settings",
+            "open_location_settings", "open_dnd_settings", "open_calendar" -> {
                 sensitive = false
             }
 
@@ -337,11 +339,16 @@ class ActionRegistry(private val context: Context) {
                 sensitive = true
             }
 
-            // Clipboard
+            // Clipboard & Share
             "copy_to_clipboard" -> {
                 val text = args.optString("text").trim()
                 if (text.isBlank() || text.length > 5000) return null
                 clean.put("text", text)
+                sensitive = false
+            }
+            "share_text" -> {
+                val text = args.optString("text").ifBlank { args.optString("content") }.trim()
+                clean.put("text", if (text.isNotBlank()) text else "FunctionGemma Voice Assistant")
                 sensitive = false
             }
 
@@ -453,6 +460,27 @@ class ActionRegistry(private val context: Context) {
                 context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 ActionResult.Success(name, "Opened Accessibility settings.")
             }
+            "open_sound_settings", "open_volume_settings" -> {
+                context.startActivity(Intent(Settings.ACTION_SOUND_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                ActionResult.Success(name, "Opened Sound & Volume settings.")
+            }
+            "open_display_settings" -> {
+                context.startActivity(Intent(Settings.ACTION_DISPLAY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                ActionResult.Success(name, "Opened Display & Brightness settings.")
+            }
+            "open_location_settings" -> {
+                context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                ActionResult.Success(name, "Opened Location settings.")
+            }
+            "open_dnd_settings" -> {
+                context.startActivity(Intent(Settings.ACTION_ZEN_MODE_PRIORITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                ActionResult.Success(name, "Opened Do Not Disturb settings.")
+            }
+            "open_calendar" -> {
+                val intent = Intent(Intent.ACTION_VIEW).setData(Uri.parse("content://com.android.calendar/time/")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                ActionResult.Success(name, "Opened Calendar.")
+            }
 
             "show_location_on_map", "show_map" -> {
                 val q = a.getString("query")
@@ -492,6 +520,7 @@ class ActionRegistry(private val context: Context) {
                 val normalized = appName.lowercase(java.util.Locale.ROOT)
                 val targetPkg = when {
                     normalized.contains("youtube") -> "com.google.android.youtube"
+                    normalized.contains("spotify") -> "com.spotify.music"
                     normalized.contains("chrome") -> "com.android.chrome"
                     normalized.contains("map") -> "com.google.android.apps.maps"
                     normalized.contains("whatsapp") -> "com.whatsapp"
@@ -499,9 +528,13 @@ class ActionRegistry(private val context: Context) {
                     normalized.contains("clock") -> "com.google.android.deskclock"
                     normalized.contains("camera") -> "com.android.camera2"
                     normalized.contains("setting") -> "com.android.settings"
+                    normalized.contains("photo") || normalized.contains("gallery") -> "com.google.android.apps.photos"
+                    normalized.contains("phone") || normalized.contains("dialer") -> "com.google.android.dialer"
+                    normalized.contains("message") || normalized.contains("sms") -> "com.google.android.apps.messaging"
+                    normalized.contains("calculator") -> "com.google.android.calculator"
                     else -> null
                 }
-                val intent = (if (targetPkg != null) pm.getLaunchIntentForPackage(targetPkg) else null)
+                var intent = (if (targetPkg != null) pm.getLaunchIntentForPackage(targetPkg) else null)
                     ?: pm.getLaunchIntentForPackage(appName)
                     ?: run {
                         val packages = pm.getInstalledApplications(0)
@@ -512,6 +545,19 @@ class ActionRegistry(private val context: Context) {
                         }
                         matched?.let { pm.getLaunchIntentForPackage(it.packageName) }
                     }
+
+                // Fallback to standard platform intents for core device apps
+                if (intent == null) {
+                    intent = when {
+                        normalized.contains("camera") -> Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+                        normalized.contains("phone") || normalized.contains("dialer") -> Intent(Intent.ACTION_DIAL)
+                        normalized.contains("photo") || normalized.contains("gallery") -> Intent(Intent.ACTION_VIEW).apply { type = "image/*" }
+                        normalized.contains("message") || normalized.contains("sms") -> Intent(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_APP_MESSAGING) }
+                        normalized.contains("clock") -> Intent(AlarmClock.ACTION_SHOW_ALARMS)
+                        else -> null
+                    }
+                }
+
                 if (intent != null) {
                     context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     ActionResult.Success(name, "Opened app: $appName")
@@ -607,6 +653,17 @@ class ActionRegistry(private val context: Context) {
                 val clip = ClipData.newPlainText("Assistant", a.getString("text"))
                 cm.setPrimaryClip(clip)
                 ActionResult.Success(name, "Copied text to clipboard.")
+            }
+            "share_text" -> {
+                val text = a.optString("text").ifBlank { "FunctionGemma Voice Assistant" }
+                val i = Intent().apply {
+                    action = Intent.ACTION_SEND
+                    putExtra(Intent.EXTRA_TEXT, text)
+                    type = "text/plain"
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(Intent.createChooser(i, "Share via").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                ActionResult.Success(name, "Opened Share sheet.")
             }
 
             "take_photo" -> {

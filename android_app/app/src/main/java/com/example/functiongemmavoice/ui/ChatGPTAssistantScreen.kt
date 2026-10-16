@@ -71,6 +71,7 @@ fun ChatGPTAssistantScreen(
     var inputText by remember { mutableStateOf("") }
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showDiagnosticsDialog by remember { mutableStateOf(false) }
+    var showMoreActionsSheet by remember { mutableStateOf(false) }
 
     // Auto-scroll to bottom on new messages
     LaunchedEffect(uiState.messages.size) {
@@ -106,10 +107,14 @@ fun ChatGPTAssistantScreen(
                     )
                 }
 
-                // Quick Prompt Chips
-                QuickPromptChips(
-                    onSelect = { prompt ->
-                        inputText = prompt
+                // Interactive Quick Action Bar
+                QuickActionBar(
+                    isBusy = uiState.isBusy,
+                    onSelectAction = { command ->
+                        onSendCommand(command)
+                    },
+                    onOpenMore = {
+                        showMoreActionsSheet = true
                     }
                 )
 
@@ -209,6 +214,24 @@ fun ChatGPTAssistantScreen(
             uiState = uiState,
             onDismiss = { showDiagnosticsDialog = false }
         )
+    }
+
+    if (showMoreActionsSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showMoreActionsSheet = false },
+            containerColor = Color.White,
+            dragHandle = { BottomSheetDefaults.DragHandle(color = Color(0xFFD1D5DB)) },
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        ) {
+            ExpandedActionsPanel(
+                isBusy = uiState.isBusy,
+                onSelectAction = { command ->
+                    showMoreActionsSheet = false
+                    onSendCommand(command)
+                },
+                onDismiss = { showMoreActionsSheet = false }
+            )
+        }
     }
 }
 
@@ -628,40 +651,294 @@ private fun ActionConfirmationBanner(
     }
 }
 
+enum class QuickActionCategory(val label: String) {
+    ALL("All"),
+    DEVICE("Device"),
+    APPS("Apps"),
+    TIME("Time"),
+    COMMUNICATION("Comm"),
+    INFO("Info")
+}
+
+data class QuickActionDefinition(
+    val id: String,
+    val title: String,
+    val command: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val category: QuickActionCategory,
+    val subtitle: String,
+    val isPrimary: Boolean = false,
+    val requiresConfirmation: Boolean = false
+)
+
+private val QuickActionCatalog = listOf(
+    // Device Controls
+    QuickActionDefinition("flash_on", "Flashlight On", "Turn on the flashlight", Icons.Default.FlashlightOn, QuickActionCategory.DEVICE, "Turn on torch LED", isPrimary = true),
+    QuickActionDefinition("flash_off", "Flashlight Off", "Turn off the flashlight", Icons.Default.FlashlightOff, QuickActionCategory.DEVICE, "Turn off torch LED"),
+    QuickActionDefinition("battery", "Battery Level", "What is my battery level?", Icons.Default.BatteryChargingFull, QuickActionCategory.DEVICE, "Current battery level & status", isPrimary = true),
+    QuickActionDefinition("wifi", "Wi-Fi Settings", "Open Wi-Fi settings", Icons.Default.Wifi, QuickActionCategory.DEVICE, "Manage Wi-Fi networks", isPrimary = true),
+    QuickActionDefinition("bluetooth", "Bluetooth", "Open Bluetooth settings", Icons.Default.Bluetooth, QuickActionCategory.DEVICE, "Pair & connect devices", isPrimary = true),
+    QuickActionDefinition("sound", "Sound & Volume", "Open sound settings", Icons.Default.VolumeUp, QuickActionCategory.DEVICE, "Volume & audio settings"),
+    QuickActionDefinition("display", "Display & Brightness", "Open display settings", Icons.Default.BrightnessMedium, QuickActionCategory.DEVICE, "Brightness & screen timeout"),
+    QuickActionDefinition("location", "Location Settings", "Open location settings", Icons.Default.LocationOn, QuickActionCategory.DEVICE, "GPS & location permissions"),
+    QuickActionDefinition("airplane", "Airplane Mode", "Open airplane mode settings", Icons.Default.AirplanemodeActive, QuickActionCategory.DEVICE, "Network & radio controls"),
+    QuickActionDefinition("dnd", "Do Not Disturb", "Open Do Not Disturb settings", Icons.Default.DoNotDisturb, QuickActionCategory.DEVICE, "Silence notifications"),
+    QuickActionDefinition("sys_settings", "Device Settings", "Open settings", Icons.Default.Settings, QuickActionCategory.DEVICE, "Main Android system settings"),
+
+    // Apps & Navigation
+    QuickActionDefinition("youtube", "YouTube", "Open YouTube", Icons.Default.PlayArrow, QuickActionCategory.APPS, "Launch YouTube video app", isPrimary = true),
+    QuickActionDefinition("spotify", "Spotify", "Open Spotify", Icons.Default.MusicNote, QuickActionCategory.APPS, "Launch Spotify music app"),
+    QuickActionDefinition("chrome", "Chrome", "Open Chrome", Icons.Default.Public, QuickActionCategory.APPS, "Browse the web"),
+    QuickActionDefinition("maps", "Google Maps", "Open Maps", Icons.Default.Navigation, QuickActionCategory.APPS, "Search places & navigation"),
+    QuickActionDefinition("camera", "Camera", "Open Camera", Icons.Default.CameraAlt, QuickActionCategory.APPS, "Launch camera capture"),
+    QuickActionDefinition("photos", "Photos", "Open Photos", Icons.Default.PhotoLibrary, QuickActionCategory.APPS, "Browse photos & media"),
+    QuickActionDefinition("phone", "Phone", "Open Phone", Icons.Default.Phone, QuickActionCategory.APPS, "Open dialer keypad"),
+    QuickActionDefinition("messages", "Messages", "Open Messages", Icons.Default.Sms, QuickActionCategory.APPS, "Open SMS messages"),
+
+    // Time & Productivity
+    QuickActionDefinition("timer_5m", "5m Timer", "Set a timer for 5 minutes", Icons.Default.Timer, QuickActionCategory.TIME, "Quick 5-minute countdown", isPrimary = true),
+    QuickActionDefinition("timer_15m", "15m Timer", "Set a timer for 15 minutes", Icons.Default.Timer, QuickActionCategory.TIME, "15-minute countdown"),
+    QuickActionDefinition("alarm_7am", "7:00 AM Alarm", "Create an alarm for 7:00 AM", Icons.Default.Alarm, QuickActionCategory.TIME, "Set morning wake-up alarm"),
+    QuickActionDefinition("time_date", "Time & Date", "Check current time and date", Icons.Default.Schedule, QuickActionCategory.TIME, "Current time, day & date", isPrimary = true),
+    QuickActionDefinition("clock", "Clock & Timers", "Open clock", Icons.Default.AccessTime, QuickActionCategory.TIME, "View alarms & stopwatches"),
+    QuickActionDefinition("calendar", "Calendar", "Open calendar", Icons.Default.CalendarMonth, QuickActionCategory.TIME, "View schedule & agenda"),
+    QuickActionDefinition("new_event", "Calendar Event", "Create a calendar event", Icons.Default.Event, QuickActionCategory.TIME, "Add new appointment (confirms first)", requiresConfirmation = true),
+
+    // Communication
+    QuickActionDefinition("call_contact", "Call Contact", "Call a contact", Icons.Default.Call, QuickActionCategory.COMMUNICATION, "Open dialer for contact (confirms first)", requiresConfirmation = true),
+    QuickActionDefinition("compose_sms", "Compose SMS", "Compose an SMS", Icons.Default.Sms, QuickActionCategory.COMMUNICATION, "Draft text message (confirms first)", requiresConfirmation = true),
+    QuickActionDefinition("send_email", "Send Email", "Send an email", Icons.Default.Email, QuickActionCategory.COMMUNICATION, "Draft email message (confirms first)", requiresConfirmation = true),
+    QuickActionDefinition("share_text", "Share Text", "Share text", Icons.Default.Share, QuickActionCategory.COMMUNICATION, "Share text to other apps"),
+
+    // Information
+    QuickActionDefinition("device_info", "Device Info", "Get device info", Icons.Default.Info, QuickActionCategory.INFO, "Model, OEM & Android version")
+)
+
 @Composable
-private fun QuickPromptChips(onSelect: (String) -> Unit) {
-    val prompts = listOf(
-        "Turn on the flashlight",
-        "Turn off the flashlight",
-        "Open Wi-Fi settings",
-        "Open Bluetooth settings",
-        "What is my battery level?",
-        "Set a timer for 5 minutes",
-        "open YouTube"
-    )
+private fun QuickActionBar(
+    isBusy: Boolean,
+    onSelectAction: (String) -> Unit,
+    onOpenMore: () -> Unit
+) {
+    val primaryActions = QuickActionCatalog.filter { it.isPrimary }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = 14.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        prompts.forEach { prompt ->
+        primaryActions.forEach { action ->
             Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = Color.White,
+                shape = RoundedCornerShape(18.dp),
+                color = if (isBusy) Color(0xFFF3F4F6) else Color.White,
                 border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle),
-                modifier = Modifier.clickable { onSelect(prompt) }
+                modifier = Modifier.clickable(enabled = !isBusy) { onSelectAction(action.command) }
             ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = action.icon,
+                        contentDescription = null,
+                        tint = if (isBusy) TextMuted else BrandBlue,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = action.title,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = if (isBusy) TextMuted else TextMain
+                    )
+                }
+            }
+        }
+
+        // "More Tools" Action Chip
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = if (isBusy) Color(0xFFF3F4F6) else BrandBlue.copy(alpha = 0.08f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, if (isBusy) BorderSubtle else BrandBlue.copy(alpha = 0.35f)),
+            modifier = Modifier.clickable(enabled = !isBusy) { onOpenMore() }
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Apps,
+                    contentDescription = "More tools",
+                    tint = if (isBusy) TextMuted else BrandBlue,
+                    modifier = Modifier.size(15.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = prompt,
+                    text = "More Tools…",
                     fontSize = 12.sp,
-                    color = TextSecondary,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (isBusy) TextMuted else BrandBlue
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ExpandedActionsPanel(
+    isBusy: Boolean,
+    onSelectAction: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedCategory by remember { mutableStateOf(QuickActionCategory.ALL) }
+
+    val filteredActions = if (selectedCategory == QuickActionCategory.ALL) {
+        QuickActionCatalog
+    } else {
+        QuickActionCatalog.filter { it.category == selectedCategory }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp, vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Quick Actions & Tools",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextMain
+                )
+                Text(
+                    text = "Tap any action to execute immediately on device",
+                    fontSize = 12.sp,
+                    color = TextSecondary
+                )
+            }
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Default.Close, contentDescription = "Close", tint = TextSecondary)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Category Filter Chips
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            QuickActionCategory.values().forEach { cat ->
+                val isSelected = (cat == selectedCategory)
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (isSelected) BrandBlue else Color(0xFFF3F4F6),
+                    modifier = Modifier.clickable { selectedCategory = cat }
+                ) {
+                    Text(
+                        text = cat.label,
+                        fontSize = 12.sp,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (isSelected) Color.White else TextSecondary,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // List of Actions
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 420.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(filteredActions) { item ->
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color.White,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = !isBusy) { onSelectAction(item.command) }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(BrandBlue.copy(alpha = 0.08f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = item.icon,
+                                contentDescription = null,
+                                tint = BrandBlue,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = item.title,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = TextMain
+                                )
+                                if (item.requiresConfirmation) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        color = Color(0xFFFEF3C7),
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "Requires confirmation",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = Color(0xFF92400E),
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            Text(
+                                text = item.subtitle,
+                                fontSize = 11.sp,
+                                color = TextSecondary
+                            )
+                        }
+
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = TextMuted,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
