@@ -1,0 +1,2713 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "open_app",
+      "description": "Open an installed Android application by display name.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "app_name": {
+            "type": "string",
+            "description": "App name"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "app_name"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "apps_navigation",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_url",
+      "description": "Open a valid HTTPS URL in the browser.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Full HTTPS URL"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "url"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "apps_navigation",
+      "required_permissions": [
+        "android.permission.INTERNET"
+      ],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "search_web",
+      "description": "Search the web using the default search provider.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "query"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "apps_navigation",
+      "required_permissions": [
+        "android.permission.INTERNET"
+      ],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "show_map",
+      "description": "Show a location, business, or address on the map.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Location or address"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "query"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "apps_navigation",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "navigate_to_place",
+      "description": "Start turn-by-step navigation to a destination.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "type": "string",
+            "description": "Destination name"
+          },
+          "mode": {
+            "type": "string",
+            "description": "Travel mode",
+            "enum": [
+              "driving",
+              "walking",
+              "bicycling",
+              "transit"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "destination",
+          "mode"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "apps_navigation",
+      "required_permissions": [
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "security_risk_level": "medium",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_recent_apps",
+      "description": "Open the Android recents/multitasking overview screen.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "apps_navigation",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "go_home_screen",
+      "description": "Navigate back to the Android home launcher screen.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "apps_navigation",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_app_info",
+      "description": "Open the system App Info page for a specific application.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "app_name": {
+            "type": "string",
+            "description": "Target application name"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "app_name"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "apps_navigation",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "check_network_Directions_traffic",
+      "description": "Check live commute traffic conditions to a destination.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "type": "string",
+            "description": "Destination location"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "destination"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "apps_navigation",
+      "required_permissions": [
+        "android.permission.INTERNET"
+      ],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "create_calendar_event",
+      "description": "Create a calendar event with title and ISO-8601 start time.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Event title"
+          },
+          "start_datetime": {
+            "type": "string",
+            "description": "ISO-8601 start time"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "start_datetime"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "calendar_reminders",
+      "required_permissions": [
+        "android.permission.WRITE_CALENDAR"
+      ],
+      "security_risk_level": "medium",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "list_calendar_events",
+      "description": "List calendar events within an ISO-8601 date range.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "start_datetime": {
+            "type": "string",
+            "description": "Start ISO-8601"
+          },
+          "end_datetime": {
+            "type": "string",
+            "description": "End ISO-8601"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "start_datetime",
+          "end_datetime"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "calendar_reminders",
+      "required_permissions": [
+        "android.permission.READ_CALENDAR"
+      ],
+      "security_risk_level": "medium",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "create_reminder",
+      "description": "Create a reminder with a title and optional time.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Reminder title"
+          },
+          "datetime": {
+            "type": "string",
+            "description": "HH:MM or ISO date"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "datetime"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "calendar_reminders",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "create_alarm",
+      "description": "Set a clock alarm at a 24-hour HH:MM time.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "time": {
+            "type": "string",
+            "description": "HH:MM time"
+          },
+          "label": {
+            "type": "string",
+            "description": "Alarm label"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "time",
+          "label"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "calendar_reminders",
+      "required_permissions": [
+        "com.android.alarm.permission.SET_ALARM"
+      ],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "create_timer",
+      "description": "Start a countdown timer in seconds.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "duration_seconds": {
+            "type": "integer",
+            "description": "Seconds",
+            "minimum": 1,
+            "maximum": 86400
+          },
+          "label": {
+            "type": "string",
+            "description": "Timer label"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "duration_seconds",
+          "label"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "calendar_reminders",
+      "required_permissions": [
+        "com.android.alarm.permission.SET_ALARM"
+      ],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "create_task",
+      "description": "Create a to-do task with an ISO-8601 due date.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Task title"
+          },
+          "due_datetime": {
+            "type": "string",
+            "description": "YYYY-MM-DD"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "due_datetime"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "calendar_reminders",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "dismiss_active_alarm",
+      "description": "Dismiss or snooze a currently ringing alarm.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Alarm action",
+            "enum": [
+              "dismiss",
+              "snooze"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "action"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "calendar_reminders",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "cancel_timer",
+      "description": "Cancel a running countdown timer by label.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Timer label to cancel"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "label"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "calendar_reminders",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_clock_stopwatch",
+      "description": "Control the stopwatch in the Android Clock app.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "Stopwatch command",
+            "enum": [
+              "start",
+              "pause",
+              "reset",
+              "lap"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "command"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "calendar_reminders",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "set_wifi_state",
+      "description": "Enable or disable Wi-Fi.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "True to enable"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "enabled"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "connectivity",
+      "required_permissions": [
+        "android.permission.CHANGE_WIFI_STATE"
+      ],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "set_bluetooth_state",
+      "description": "Enable or disable Bluetooth.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "True to enable"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "enabled"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "connectivity",
+      "required_permissions": [
+        "android.permission.BLUETOOTH_CONNECT"
+      ],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_wifi_settings",
+      "description": "Open the system Wi-Fi settings panel.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "connectivity",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_bluetooth_pairing",
+      "description": "Open the Bluetooth device pairing screen.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "connectivity",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_hotspot_settings",
+      "description": "Open the portable Wi-Fi hotspot settings screen.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "connectivity",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_airplane_mode_settings",
+      "description": "Open Airplane Mode settings for user confirmation.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "connectivity",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_mobile_data_settings",
+      "description": "Open SIM and mobile data usage settings.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "connectivity",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_nfc_settings",
+      "description": "Open NFC and contactless payment settings.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "connectivity",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "check_network_connection_status",
+      "description": "Read current Wi-Fi and cellular connectivity state.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "connectivity",
+      "required_permissions": [
+        "android.permission.ACCESS_NETWORK_STATE"
+      ],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "search_contacts",
+      "description": "Search contacts by name.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Contact name"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "query"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "contacts",
+      "required_permissions": [
+        "android.permission.READ_CONTACTS"
+      ],
+      "security_risk_level": "medium",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "create_contact",
+      "description": "Create a new contact in the address book.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "first_name": {
+            "type": "string",
+            "description": "First name"
+          },
+          "phone_number": {
+            "type": "string",
+            "description": "Phone number"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "first_name",
+          "phone_number"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "contacts",
+      "required_permissions": [
+        "android.permission.WRITE_CONTACTS"
+      ],
+      "security_risk_level": "medium",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "view_contact_details",
+      "description": "Open the contact card for a specific contact name.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Contact full name"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "contacts",
+      "required_permissions": [
+        "android.permission.READ_CONTACTS"
+      ],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "dial_phone_number",
+      "description": "Open the phone dialer pre-filled with a number (requires user tap to call).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "phone_number": {
+            "type": "string",
+            "description": "Phone number to dial"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "phone_number"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "contacts",
+      "required_permissions": [],
+      "security_risk_level": "medium",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_call_history",
+      "description": "Open the recent calls log in the Phone app.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "contacts",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "list_favorite_contacts",
+      "description": "Display starred/favorite contacts.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "contacts",
+      "required_permissions": [
+        "android.permission.READ_CONTACTS"
+      ],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "add_contact_email",
+      "description": "Open contact editor to attach an email address to an existing contact.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Contact name"
+          },
+          "email": {
+            "type": "string",
+            "description": "Email address"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "email"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "contacts",
+      "required_permissions": [
+        "android.permission.WRITE_CONTACTS"
+      ],
+      "security_risk_level": "medium",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "share_contact_card",
+      "description": "Open share sheet for a named contact's vCard.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Contact name"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "contacts",
+      "required_permissions": [
+        "android.permission.READ_CONTACTS"
+      ],
+      "security_risk_level": "medium",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_emergency_dialer_info",
+      "description": "Open the emergency information and medical ID screen.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "contacts",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "compose_sms",
+      "description": "Prepare an SMS draft for user review; never sends silently.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "phone_number": {
+            "type": "string",
+            "description": "Recipient phone"
+          },
+          "message": {
+            "type": "string",
+            "description": "SMS body"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "phone_number",
+          "message"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "messaging_sharing",
+      "required_permissions": [],
+      "security_risk_level": "medium",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "compose_email",
+      "description": "Prepare an email draft for user review; never sends silently.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string",
+            "description": "Recipient email"
+          },
+          "subject": {
+            "type": "string",
+            "description": "Email subject"
+          },
+          "body": {
+            "type": "string",
+            "description": "Email body"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "to",
+          "subject",
+          "body"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "messaging_sharing",
+      "required_permissions": [],
+      "security_risk_level": "medium",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "send_email",
+      "description": "Open email client ready to send after user confirmation.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string",
+            "description": "Recipient email"
+          },
+          "subject": {
+            "type": "string",
+            "description": "Subject"
+          },
+          "body": {
+            "type": "string",
+            "description": "Body"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "to",
+          "subject",
+          "body"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "messaging_sharing",
+      "required_permissions": [],
+      "security_risk_level": "medium",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "share_text",
+      "description": "Open Android's system share sheet with approved text.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Text to share"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "messaging_sharing",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "copy_to_clipboard",
+      "description": "Copy user-specified text to the Android system clipboard.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Text to copy"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "messaging_sharing",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_sms_inbox",
+      "description": "Open the default SMS Messages inbox.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "messaging_sharing",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_email_inbox",
+      "description": "Open the default email client inbox.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "messaging_sharing",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "share_url_link",
+      "description": "Open the Android share sheet for a valid URL.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to share"
+          },
+          "title": {
+            "type": "string",
+            "description": "Link title"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "url",
+          "title"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "messaging_sharing",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_nearby_share",
+      "description": "Open Android Quick Share / Nearby Share settings.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "messaging_sharing",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "set_volume",
+      "description": "Set media volume percentage from 0 to 100.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "type": "integer",
+            "description": "Volume 0-100",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "level"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "sound_display",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_volume",
+      "description": "Read the current media volume percentage.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "sound_display",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "set_brightness",
+      "description": "Set screen brightness percentage from 1 to 100.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "type": "integer",
+            "description": "Brightness 1-100",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "level"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "sound_display",
+      "required_permissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "set_do_not_disturb",
+      "description": "Enable or disable Do Not Disturb mode.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "True to enable DND"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "enabled"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "sound_display",
+      "required_permissions": [
+        "android.permission.ACCESS_NOTIFICATION_POLICY"
+      ],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "set_ring_volume",
+      "description": "Set phone ringtone volume percentage from 0 to 100.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "type": "integer",
+            "description": "Ring volume 0-100",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "level"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "sound_display",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "set_alarm_volume",
+      "description": "Set alarm stream volume percentage from 10 to 100.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "type": "integer",
+            "description": "Alarm volume 10-100",
+            "minimum": 10,
+            "maximum": 100
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "level"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "sound_display",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "set_ringer_mode",
+      "description": "Set the handset ringer mode to normal, vibrate, or silent.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "description": "Ringer mode",
+            "enum": [
+              "normal",
+              "vibrate",
+              "silent"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "mode"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "sound_display",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "set_auto_brightness",
+      "description": "Enable or disable adaptive automatic screen brightness.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "True for adaptive brightness"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "enabled"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "sound_display",
+      "required_permissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "set_dark_mode_ui",
+      "description": "Open display theme settings or request dark mode state.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "True to enable dark theme"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "enabled"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "sound_display",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "toggle_flashlight",
+      "description": "Turn the device flashlight on or off.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "True for on, false for off"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "enabled"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "flashlight",
+      "required_permissions": [
+        "android.permission.CAMERA"
+      ],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "turn_on_flashlight",
+      "description": "Turn the device flashlight on.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "flashlight",
+      "required_permissions": [
+        "android.permission.CAMERA"
+      ],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "turn_off_flashlight",
+      "description": "Turn the device flashlight off.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "flashlight",
+      "required_permissions": [
+        "android.permission.CAMERA"
+      ],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "set_flashlight_strength",
+      "description": "Set torch brightness level from 1 to 5 on supported Android 13+ devices.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "type": "integer",
+            "description": "Torch level 1-5",
+            "minimum": 1,
+            "maximum": 5
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "level"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "flashlight",
+      "required_permissions": [
+        "android.permission.CAMERA"
+      ],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_flashlight_status",
+      "description": "Check whether the device flashlight is currently on or off.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "flashlight",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "pulse_flashlight_sos",
+      "description": "Blink the flashlight in a visible alert pattern after user confirmation.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pulses": {
+            "type": "integer",
+            "description": "Number of blinks 1-10",
+            "minimum": 1,
+            "maximum": 10
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "pulses"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "flashlight",
+      "required_permissions": [
+        "android.permission.CAMERA"
+      ],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "set_flashlight_auto_off_timer",
+      "description": "Turn on the flashlight and schedule it to turn off after N seconds.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "duration_seconds": {
+            "type": "integer",
+            "description": "Duration 5-600s",
+            "minimum": 5,
+            "maximum": 600
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "duration_seconds"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "flashlight",
+      "required_permissions": [
+        "android.permission.CAMERA"
+      ],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "toggle_screen_flash_light",
+      "description": "Use the display at full white brightness as a soft front light.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "True to enable screen light"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "enabled"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "flashlight",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "check_flashlight_hardware",
+      "description": "Check if the device has a dedicated camera flash LED unit.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "flashlight",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "set_media_playback",
+      "description": "Control active media session playback.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "Playback command",
+            "enum": [
+              "play",
+              "pause",
+              "next",
+              "previous",
+              "stop"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "command"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "media",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "take_photo",
+      "description": "Open camera flow to capture a photo with front or rear lens.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "camera": {
+            "type": "string",
+            "description": "Camera lens",
+            "enum": [
+              "front",
+              "rear"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "camera"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "media",
+      "required_permissions": [
+        "android.permission.CAMERA"
+      ],
+      "security_risk_level": "medium",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "record_audio",
+      "description": "Start a voice audio recording for a bounded duration.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "duration_seconds": {
+            "type": "integer",
+            "description": "Seconds 1-3600",
+            "minimum": 1,
+            "maximum": 3600
+          },
+          "label": {
+            "type": "string",
+            "description": "Clip label"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "duration_seconds",
+          "label"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "media",
+      "required_permissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
+      "security_risk_level": "high",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "stop_audio_recording",
+      "description": "Stop an active audio recording started by the app.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "media",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_video_camera",
+      "description": "Launch the system camera in video recording mode.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "camera": {
+            "type": "string",
+            "description": "Lens",
+            "enum": [
+              "front",
+              "rear"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "camera"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "media",
+      "required_permissions": [
+        "android.permission.CAMERA"
+      ],
+      "security_risk_level": "medium",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "play_music_query",
+      "description": "Search and play a song, artist, or playlist in the default music app.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Song, artist, or playlist"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "query"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "media",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_photo_gallery",
+      "description": "Open the device photo gallery or recent camera roll.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "media",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "toggle_media_mute",
+      "description": "Mute or unmute the media audio stream.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "muted": {
+            "type": "boolean",
+            "description": "True to mute media"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "muted"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "media",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "check_active_media_track",
+      "description": "Read metadata (title and artist) of the currently playing media session.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "media",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "create_note",
+      "description": "Save a note with title and body in the notes store.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Note title"
+          },
+          "body": {
+            "type": "string",
+            "description": "Note body"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "body"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "files_productivity",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "search_files",
+      "description": "Search user-accessible files by filename or keyword.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "File search query"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "query"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "files_productivity",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "list_recent_downloads",
+      "description": "Open or list recently downloaded files in the Downloads folder.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "files_productivity",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "check_storage_space",
+      "description": "Read available and total internal storage capacity.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "files_productivity",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_document_viewer",
+      "description": "Open a user-accessible document by filename.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "filename": {
+            "type": "string",
+            "description": "Document filename"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "filename"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "files_productivity",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "append_to_note",
+      "description": "Append text to an existing note by title.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Note title"
+          },
+          "additional_text": {
+            "type": "string",
+            "description": "Text to append"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "additional_text"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "files_productivity",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "search_notes",
+      "description": "Search saved notes by keyword.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "keyword": {
+            "type": "string",
+            "description": "Note search keyword"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "keyword"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "files_productivity",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "create_checklist",
+      "description": "Create a checklist with a title and comma-separated items.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Checklist title"
+          },
+          "items": {
+            "type": "string",
+            "description": "Comma-separated items"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "items"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "files_productivity",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_downloads_folder",
+      "description": "Open the system Files app directly to the Downloads directory.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "files_productivity",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_system_settings",
+      "description": "Open a specific Android system settings section.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "section": {
+            "type": "string",
+            "description": "Settings section",
+            "enum": [
+              "wifi",
+              "bluetooth",
+              "display",
+              "sound",
+              "apps",
+              "location",
+              "notifications",
+              "privacy",
+              "accessibility",
+              "general"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "section"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "device_settings",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_battery_status",
+      "description": "Read the current battery percentage and charging state.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "device_settings",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_device_info",
+      "description": "Read non-sensitive device model and Android OS version.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "device_settings",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_battery_saver_settings",
+      "description": "Open the Battery Saver configuration screen.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "device_settings",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_storage_settings",
+      "description": "Open the Android system Storage management settings.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "device_settings",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_security_settings",
+      "description": "Open the device Security and screen lock settings screen.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "device_settings",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_language_input_settings",
+      "description": "Open system Language and Keyboard input settings.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "device_settings",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_date_time_settings",
+      "description": "Open system Date and Time configuration settings.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "device_settings",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_developer_options",
+      "description": "Open Android Developer Options screen if enabled on the handset.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "device_settings",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_current_location",
+      "description": "Get current location after verifying location permission.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "accuracy": {
+            "type": "string",
+            "description": "Location accuracy",
+            "enum": [
+              "coarse",
+              "fine"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "accuracy"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "utilities",
+      "required_permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "security_risk_level": "high",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "calculate_expression",
+      "description": "Evaluate a mathematical expression locally.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "Math expression"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "expression"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "utilities",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "convert_units",
+      "description": "Convert a numeric value between standard measurement units.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "integer",
+            "description": "Numeric value",
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "from_unit": {
+            "type": "string",
+            "description": "Source unit",
+            "enum": [
+              "km",
+              "miles",
+              "kg",
+              "lbs",
+              "celsius",
+              "fahrenheit",
+              "meters",
+              "feet"
+            ]
+          },
+          "to_unit": {
+            "type": "string",
+            "description": "Target unit",
+            "enum": [
+              "km",
+              "miles",
+              "kg",
+              "lbs",
+              "celsius",
+              "fahrenheit",
+              "meters",
+              "feet"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "value",
+          "from_unit",
+          "to_unit"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "utilities",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_qr_scanner",
+      "description": "Open the approved camera QR code scanner workflow.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "utilities",
+      "required_permissions": [
+        "android.permission.CAMERA"
+      ],
+      "security_risk_level": "medium",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "check_current_time_date",
+      "description": "Read the current local date, time, and timezone.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "utilities",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "generate_random_number",
+      "description": "Generate a random integer within an inclusive range.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "min_val": {
+            "type": "integer",
+            "description": "Min value",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "max_val": {
+            "type": "integer",
+            "description": "Max value",
+            "minimum": 1,
+            "maximum": 10000
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "min_val",
+          "max_val"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "utilities",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_compass_sensor",
+      "description": "Open the device magnetometer/compass utility view.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "utilities",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "check_device_sensors",
+      "description": "List available hardware sensors (accelerometer, gyroscope, light).",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "utilities",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_voice_recorder_app",
+      "description": "Open the standalone Voice Recorder application.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "utilities",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_accessibility_settings",
+      "description": "Open the top-level Android Accessibility settings screen.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "accessibility",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "set_font_scale_preview",
+      "description": "Open font size settings to adjust text scale percentage.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "scale_percent": {
+            "type": "integer",
+            "description": "Font scale 85-200",
+            "minimum": 85,
+            "maximum": 200
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "scale_percent"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "accessibility",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_talkback_settings",
+      "description": "Open screen reader / TalkBack accessibility settings.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "accessibility",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_magnification_settings",
+      "description": "Open screen magnification gesture settings.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "accessibility",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_live_caption_settings",
+      "description": "Open Live Caption and subtitle accessibility settings.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "accessibility",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "set_high_contrast_text_settings",
+      "description": "Open display contrast and color correction accessibility settings.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "accessibility",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "speak_text_aloud",
+      "description": "Read a provided text string aloud using Android TextToSpeech.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Text to speak aloud"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ]
+      }
+    },
+    "android_metadata": {
+      "category": "accessibility",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_hearing_aid_settings",
+      "description": "Open hearing devices and audio routing accessibility settings.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "accessibility",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "open_one_handed_mode_settings",
+      "description": "Open one-handed gesture settings.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "android_metadata": {
+      "category": "accessibility",
+      "required_permissions": [],
+      "security_risk_level": "low",
+      "error_handling_policy": "validate_allowlist_and_permissions_before_execution"
+    }
+  }
+]

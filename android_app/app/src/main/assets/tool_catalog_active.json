@@ -1,0 +1,593 @@
+[
+  {
+    "name": "open_app",
+    "description": "Open an installed Android application by display name.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "app_name": {
+          "type": "string",
+          "description": "App name"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "app_name"
+      ]
+    }
+  },
+  {
+    "name": "open_url",
+    "description": "Open a valid HTTPS URL in the browser.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "Full HTTPS URL"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "url"
+      ]
+    }
+  },
+  {
+    "name": "search_web",
+    "description": "Search the web using the default search provider.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Search query"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "query"
+      ]
+    }
+  },
+  {
+    "name": "show_map",
+    "description": "Show a location, business, or address on the map.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Location or address"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "query"
+      ]
+    }
+  },
+  {
+    "name": "navigate_to_place",
+    "description": "Start turn-by-step navigation to a destination.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "destination": {
+          "type": "string",
+          "description": "Destination name"
+        },
+        "mode": {
+          "type": "string",
+          "description": "Travel mode",
+          "enum": [
+            "driving",
+            "walking",
+            "bicycling",
+            "transit"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "destination",
+        "mode"
+      ]
+    }
+  },
+  {
+    "name": "go_home_screen",
+    "description": "Navigate back to the Android home launcher screen.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "create_calendar_event",
+    "description": "Create a calendar event with title and ISO-8601 start time.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Event title"
+        },
+        "start_datetime": {
+          "type": "string",
+          "description": "ISO-8601 start time"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "start_datetime"
+      ]
+    }
+  },
+  {
+    "name": "create_alarm",
+    "description": "Set a clock alarm at a 24-hour HH:MM time.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "string",
+          "description": "HH:MM time"
+        },
+        "label": {
+          "type": "string",
+          "description": "Alarm label"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "time",
+        "label"
+      ]
+    }
+  },
+  {
+    "name": "create_timer",
+    "description": "Start a countdown timer in seconds.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "duration_seconds": {
+          "type": "integer",
+          "description": "Seconds",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "label": {
+          "type": "string",
+          "description": "Timer label"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "duration_seconds",
+        "label"
+      ]
+    }
+  },
+  {
+    "name": "open_clock_stopwatch",
+    "description": "Control the stopwatch in the Android Clock app.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "Stopwatch command",
+          "enum": [
+            "start",
+            "pause",
+            "reset",
+            "lap"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "command"
+      ]
+    }
+  },
+  {
+    "name": "open_wifi_settings",
+    "description": "Open the system Wi-Fi settings panel.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "open_bluetooth_pairing",
+    "description": "Open the Bluetooth device pairing screen.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "open_airplane_mode_settings",
+    "description": "Open Airplane Mode settings for user confirmation.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "open_mobile_data_settings",
+    "description": "Open SIM and mobile data usage settings.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "open_nfc_settings",
+    "description": "Open NFC and contactless payment settings.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "create_contact",
+    "description": "Create a new contact in the address book.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "first_name": {
+          "type": "string",
+          "description": "First name"
+        },
+        "phone_number": {
+          "type": "string",
+          "description": "Phone number"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "first_name",
+        "phone_number"
+      ]
+    }
+  },
+  {
+    "name": "dial_phone_number",
+    "description": "Open the phone dialer pre-filled with a number (requires user tap to call).",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "phone_number": {
+          "type": "string",
+          "description": "Phone number to dial"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "phone_number"
+      ]
+    }
+  },
+  {
+    "name": "compose_sms",
+    "description": "Prepare an SMS draft for user review; never sends silently.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "phone_number": {
+          "type": "string",
+          "description": "Recipient phone"
+        },
+        "message": {
+          "type": "string",
+          "description": "SMS body"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "phone_number",
+        "message"
+      ]
+    }
+  },
+  {
+    "name": "compose_email",
+    "description": "Prepare an email draft for user review; never sends silently.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "to": {
+          "type": "string",
+          "description": "Recipient email"
+        },
+        "subject": {
+          "type": "string",
+          "description": "Email subject"
+        },
+        "body": {
+          "type": "string",
+          "description": "Email body"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "to",
+        "subject",
+        "body"
+      ]
+    }
+  },
+  {
+    "name": "send_email",
+    "description": "Open email client ready to send after user confirmation.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "to": {
+          "type": "string",
+          "description": "Recipient email"
+        },
+        "subject": {
+          "type": "string",
+          "description": "Subject"
+        },
+        "body": {
+          "type": "string",
+          "description": "Body"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "to",
+        "subject",
+        "body"
+      ]
+    }
+  },
+  {
+    "name": "copy_to_clipboard",
+    "description": "Copy user-specified text to the Android system clipboard.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "Text to copy"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "text"
+      ]
+    }
+  },
+  {
+    "name": "toggle_flashlight",
+    "description": "Turn the device flashlight on or off.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "True for on, false for off"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "enabled"
+      ]
+    }
+  },
+  {
+    "name": "turn_on_flashlight",
+    "description": "Turn the device flashlight on.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "turn_off_flashlight",
+    "description": "Turn the device flashlight off.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "take_photo",
+    "description": "Open camera flow to capture a photo with front or rear lens.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "camera": {
+          "type": "string",
+          "description": "Camera lens",
+          "enum": [
+            "front",
+            "rear"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "camera"
+      ]
+    }
+  },
+  {
+    "name": "open_video_camera",
+    "description": "Launch the system camera in video recording mode.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "camera": {
+          "type": "string",
+          "description": "Lens",
+          "enum": [
+            "front",
+            "rear"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "camera"
+      ]
+    }
+  },
+  {
+    "name": "open_photo_gallery",
+    "description": "Open the device photo gallery or recent camera roll.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "create_note",
+    "description": "Save a note with title and body in the notes store.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Note title"
+        },
+        "body": {
+          "type": "string",
+          "description": "Note body"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "body"
+      ]
+    }
+  },
+  {
+    "name": "open_system_settings",
+    "description": "Open a specific Android system settings section.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "section": {
+          "type": "string",
+          "description": "Settings section",
+          "enum": [
+            "wifi",
+            "bluetooth",
+            "display",
+            "sound",
+            "apps",
+            "location",
+            "notifications",
+            "privacy",
+            "accessibility",
+            "general"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "section"
+      ]
+    }
+  },
+  {
+    "name": "get_battery_status",
+    "description": "Read the current battery percentage and charging state.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "get_device_info",
+    "description": "Read non-sensitive device model and Android OS version.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "open_battery_saver_settings",
+    "description": "Open the Battery Saver configuration screen.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "open_storage_settings",
+    "description": "Open the Android system Storage management settings.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "open_security_settings",
+    "description": "Open the device Security and screen lock settings screen.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "open_date_time_settings",
+    "description": "Open system Date and Time configuration settings.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "open_developer_options",
+    "description": "Open Android Developer Options screen if enabled on the handset.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "check_current_time_date",
+    "description": "Read the current local date, time, and timezone.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "open_accessibility_settings",
+    "description": "Open the top-level Android Accessibility settings screen.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  }
+]
