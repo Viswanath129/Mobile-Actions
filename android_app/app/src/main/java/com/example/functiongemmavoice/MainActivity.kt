@@ -72,6 +72,7 @@ data class ExamplePrompt(
 )
 
 private val VerifiedExamples = listOf(
+    ExamplePrompt("Apps", "open YouTube", "open_app"),
     ExamplePrompt("Flashlight", "Turn on the flashlight", "turn_on_flashlight"),
     ExamplePrompt("Flashlight", "Turn off the flashlight", "turn_off_flashlight"),
     ExamplePrompt("Settings", "Open Wi-Fi settings", "open_wifi_settings"),
@@ -245,11 +246,12 @@ private fun AssistantScreen(
         lines.add(ChatLine("user", text))
         input = ""
         busy = true
-        status = "Processing on-device…"
+        status = "Thinking…"
+        val startNs = System.nanoTime()
         scope.launch {
             try {
+                status = "Validating & Executing…"
                 val outcomes = runtime.handlePrompt(text)
-                status = "Model active • 38 Tools Ready"
                 budgetInfo = runtime.getBudgetStatus()
                 for (outcome in outcomes) {
                     when (outcome) {
@@ -259,8 +261,9 @@ private fun AssistantScreen(
                             isSpeaking = true
                         }
                         is TurnOutcome.ActionExecuted -> {
-                            lines.add(ChatLine("assistant", "[Tool: ${outcome.name}]\n${outcome.result}"))
-                            speak(outcome.result, speechLanguage)
+                            val msg = outcome.result.userFacingMessage()
+                            lines.add(ChatLine("assistant", msg))
+                            speak(msg, speechLanguage)
                             isSpeaking = true
                         }
                         is TurnOutcome.ConfirmationNeeded -> {
@@ -272,9 +275,13 @@ private fun AssistantScreen(
                         }
                     }
                 }
+                val elapsedMs = (System.nanoTime() - startNs) / 1_000_000
+                status = "Completed (${elapsedMs}ms) • 38 Tools Ready"
             } catch (e: AssistantException) {
                 status = "Recovered session"
-                lines.add(ChatLine("system", e.userFacingMessage, isError = true, technicalDetails = e.technicalDetails))
+                if (lines.lastOrNull()?.text != e.userFacingMessage) {
+                    lines.add(ChatLine("system", e.userFacingMessage, isError = true, technicalDetails = e.technicalDetails))
+                }
             } catch (e: Throwable) {
                 status = "Error encountered"
                 lines.add(ChatLine("system", "Inference error: ${e.message}", isError = true, technicalDetails = e.stackTraceToString()))
@@ -318,8 +325,9 @@ private fun AssistantScreen(
                         val act = action
                         pendingConfirmation = null
                         val result = runtime.executeConfirmedAction(act)
-                        lines.add(ChatLine("assistant", "[Executed: ${act.name}]\n$result"))
-                        speak(result, speechLanguage)
+                        val msg = result.userFacingMessage()
+                        lines.add(ChatLine("assistant", msg))
+                        speak(msg, speechLanguage)
                     }
                 ) { Text("Confirm & Open") }
             },
@@ -362,7 +370,9 @@ private fun AssistantScreen(
             IconButton(onClick = {
                 scope.launch {
                     runtime.resetConversation()
-                    lines.add(ChatLine("system", "Conversation session reset."))
+                    if (lines.lastOrNull()?.text != "Conversation session reset.") {
+                        lines.add(ChatLine("system", "Conversation session reset."))
+                    }
                 }
             }) {
                 Icon(Icons.Default.Refresh, contentDescription = "New Session", tint = PrimaryBlue)

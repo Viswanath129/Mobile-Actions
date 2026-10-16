@@ -17,6 +17,8 @@ import com.google.ai.edge.litertlm.ToolProvider
 import com.google.ai.edge.litertlm.tool
 import org.json.JSONArray
 import org.json.JSONObject
+import android.Manifest
+import android.content.pm.PackageManager
 import java.io.InputStreamReader
 
 data class PreparedAction(
@@ -25,6 +27,26 @@ data class PreparedAction(
     val summary: String,
     val requiresConfirmation: Boolean
 )
+
+sealed class ActionResult {
+    data class Success(val tool: String, val message: String) : ActionResult()
+    data class NeedsConfirmation(val action: PreparedAction) : ActionResult()
+    data class InvalidArguments(val tool: String, val reason: String) : ActionResult()
+    data class PermissionDenied(val tool: String, val permission: String) : ActionResult()
+    data class UnsupportedAction(val tool: String) : ActionResult()
+    data class ExecutionFailed(val tool: String, val error: String) : ActionResult()
+    data class Cancelled(val tool: String) : ActionResult()
+
+    fun userFacingMessage(): String = when (this) {
+        is Success -> message
+        is NeedsConfirmation -> "Action '${action.name}' requires confirmation."
+        is InvalidArguments -> "Invalid arguments for $tool: $reason"
+        is PermissionDenied -> "Permission required: $permission"
+        is UnsupportedAction -> "Action '$tool' is not supported."
+        is ExecutionFailed -> "Failed to execute $tool: $error"
+        is Cancelled -> "Action '$tool' was cancelled."
+    }
+}
 
 class ActionRegistry(private val context: Context) {
 
@@ -90,7 +112,34 @@ class ActionRegistry(private val context: Context) {
         return tools
     }
 
-    fun parseArgs(raw: String): JSONObject = try { JSONObject(raw) } catch (_: Throwable) { JSONObject() }
+    fun parseArgs(raw: String): JSONObject {
+        val cleaned = raw
+            .replace("<escape>", "")
+            .replace("</escape>", "")
+            .trim()
+        try {
+            return JSONObject(cleaned)
+        } catch (_: Throwable) {
+            val obj = JSONObject()
+            val inner = cleaned.removePrefix("{").removeSuffix("}").trim()
+            if (inner.isNotEmpty()) {
+                val pairs = inner.split(",")
+                for (p in pairs) {
+                    val kv = p.split(":", limit = 2)
+                    if (kv.size == 2) {
+                        val k = kv[0].trim().trim('"', '\'')
+                        val v = kv[1].trim().trim('"', '\'')
+                        if (k.isNotEmpty()) {
+                            val intVal = v.toIntOrNull()
+                            if (intVal != null) obj.put(k, intVal)
+                            else obj.put(k, v)
+                        }
+                    }
+                }
+            }
+            return obj
+        }
+    }
 
     /**
      * Strict validation for tools and arguments.
@@ -136,16 +185,31 @@ class ActionRegistry(private val context: Context) {
                 sensitive = false
             }
             "open_url" -> {
-                val url = args.optString("url").trim()
-                // Strict URL validation: HTTPS ONLY to prevent file:, intent:, javascript: injection
-                if (!url.startsWith("https://", ignoreCase = true) || url.length > 500) return null
+                var url = args.optString("url").trim()
+                if (url.isBlank() || url.length > 500) return null
+                val lower = url.lowercase(java.util.Locale.ROOT)
+                // Strictly block insecure HTTP, dangerous, file, or script schemes
+                if (lower.startsWith("http://") || lower.startsWith("file:") ||
+                    lower.startsWith("javascript:") || lower.startsWith("content:") ||
+                    lower.startsWith("intent:") || lower.startsWith("data:") ||
+                    lower.startsWith("about:")) {
+                    return null
+                }
+                if (!lower.startsWith("https://")) {
+                    if (lower.contains("://")) return null
+                    url = "https://$url"
+                }
+                if (!url.startsWith("https://", ignoreCase = true)) return null
                 clean.put("url", url)
                 sensitive = false
             }
 
             // App Navigation
             "open_app" -> {
-                val app = args.optString("app_name").trim()
+                val app = args.optString("app_name")
+                    .replace("<escape>", "")
+                    .replace("</escape>", "")
+                    .trim()
                 if (app.isBlank() || app.length > 100) return null
                 clean.put("app_name", app)
                 sensitive = false
@@ -156,24 +220,48 @@ class ActionRegistry(private val context: Context) {
 
             // Clock, Alarm, Timer
             "create_alarm" -> {
-                val hour = args.optInt("hour", -1)
-                val minutes = args.optInt("minutes", 0)
+                var hour = args.optInt("hour", -1)
+                var minutes = args.optInt("minutes", -1)
+                val timeStr = args.optString("time").trim()
+                if (hour == -1 && timeStr.isNotBlank()) {
+                    val parsed = parseTimeStringToHourMinute(timeStr)
+                    if (parsed != null) {
+                        hour = parsed.first
+                        minutes = parsed.second
+                    }
+                }
+                if (minutes == -1) minutes = 0
                 if (hour !in 0..23 || minutes !in 0..59) return null
                 clean.put("hour", hour)
                 clean.put("minutes", minutes)
-                val msg = args.optString("message").trim()
+                val msg = args.optString("message").ifBlank { args.optString("label") }.trim()
                 if (msg.isNotBlank()) clean.put("message", msg.take(100))
                 sensitive = false
             }
             "create_timer" -> {
-                val sec = args.optInt("duration_seconds", args.optInt("seconds", -1))
-                if (sec <= 0 || sec > 86400) return null
+                var sec = args.optInt("duration_seconds", -1)
+                if (sec <= 0) sec = args.optInt("seconds", -1)
+                if (sec <= 0 && args.has("minutes")) {
+                    sec = args.optInt("minutes", 0) * 60
+                }
+                if (sec <= 0 && args.has("duration")) {
+                    val dStr = args.optString("duration").trim()
+                    sec = parseDurationToSeconds(dStr)
+                }
+                if (sec <= 0 && args.has("duration_seconds")) {
+                    val dStr = args.optString("duration_seconds").trim()
+                    sec = parseDurationToSeconds(dStr)
+                }
+                if (sec <= 0) sec = 300 // default 5 minutes if invoked without duration
+                sec = sec.coerceIn(1, 86400)
                 clean.put("duration_seconds", sec)
-                val msg = args.optString("message").trim()
+                val msg = args.optString("message").ifBlank { args.optString("label") }.trim()
                 if (msg.isNotBlank()) clean.put("message", msg.take(100))
                 sensitive = false
             }
             "open_clock_stopwatch" -> {
+                val cmd = args.optString("command").ifBlank { "start" }
+                clean.put("command", cmd)
                 sensitive = false
             }
 
@@ -208,15 +296,26 @@ class ActionRegistry(private val context: Context) {
             // Calendar (Sensitive: requires confirmation)
             "create_calendar_event" -> {
                 val title = args.optString("title").trim()
-                val s = args.optString("start_iso")
-                val e = args.optString("end_iso")
                 if (title.isBlank() || title.length > 120) return null
-                val sm = runCatching { java.time.OffsetDateTime.parse(s).toInstant().toEpochMilli() }.getOrNull() ?: return null
-                val em = runCatching { java.time.OffsetDateTime.parse(e).toInstant().toEpochMilli() }.getOrNull() ?: return null
-                if (em <= sm || em - sm > 604800000L) return null
+                val s = args.optString("start_datetime").ifBlank { args.optString("start_iso") }.ifBlank { args.optString("start_time") }
+                val startMs = if (s.isNotBlank()) {
+                    runCatching { java.time.OffsetDateTime.parse(s).toInstant().toEpochMilli() }
+                        .getOrNull() ?: runCatching { java.time.LocalDateTime.parse(s).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() }
+                        .getOrNull() ?: (System.currentTimeMillis() + 3600000L)
+                } else {
+                    System.currentTimeMillis() + 3600000L
+                }
+                val e = args.optString("end_datetime").ifBlank { args.optString("end_iso") }
+                val endMs = if (e.isNotBlank()) {
+                    runCatching { java.time.OffsetDateTime.parse(e).toInstant().toEpochMilli() }
+                        .getOrNull() ?: runCatching { java.time.LocalDateTime.parse(e).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() }
+                        .getOrNull() ?: (startMs + 3600000L)
+                } else {
+                    startMs + 3600000L
+                }
                 clean.put("title", title)
-                clean.put("start_iso", s)
-                clean.put("end_iso", e)
+                clean.put("start_millis", startMs)
+                clean.put("end_millis", endMs)
                 if (args.has("description")) clean.put("description", args.optString("description").take(1000))
                 sensitive = true
             }
@@ -248,6 +347,8 @@ class ActionRegistry(private val context: Context) {
 
             // Camera / Media capture
             "take_photo", "open_video_camera" -> {
+                val cam = args.optString("camera").ifBlank { "rear" }
+                clean.put("camera", cam)
                 sensitive = false
             }
             "open_photo_gallery" -> {
@@ -256,10 +357,11 @@ class ActionRegistry(private val context: Context) {
 
             // Notes
             "create_note" -> {
-                val text = args.optString("text").ifBlank { args.optString("content") }.trim()
+                val text = args.optString("body").ifBlank { args.optString("text") }.ifBlank { args.optString("content") }.trim()
                 if (text.isBlank() || text.length > 5000) return null
                 clean.put("text", text)
-                clean.put("title", args.optString("title").take(100))
+                val title = args.optString("title").trim()
+                if (title.isNotBlank()) clean.put("title", title.take(100))
                 sensitive = false
             }
 
@@ -280,7 +382,11 @@ class ActionRegistry(private val context: Context) {
     /**
      * Executes approved action via Android APIs or Intents.
      */
-    fun execute(name: String, a: JSONObject): String = try {
+    /**
+     * Executes approved action via Android APIs or Intents.
+     * Returns structured ActionResult with truthful execution status.
+     */
+    fun execute(name: String, a: JSONObject): ActionResult = try {
         when (name) {
             "turn_on_flashlight" -> setFlashlight(true)
             "turn_off_flashlight" -> setFlashlight(false)
@@ -288,64 +394,77 @@ class ActionRegistry(private val context: Context) {
 
             "open_wifi_settings" -> {
                 context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                "Opened Wi-Fi settings."
+                ActionResult.Success(name, "Opened Wi-Fi settings.")
             }
             "open_bluetooth_pairing" -> {
                 context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                "Opened Bluetooth settings."
+                ActionResult.Success(name, "Opened Bluetooth settings.")
             }
             "open_system_settings" -> {
-                context.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                "Opened System Settings."
+                val section = a.optString("section").lowercase(java.util.Locale.ROOT)
+                val intent = when (section) {
+                    "wifi" -> Intent(Settings.ACTION_WIFI_SETTINGS)
+                    "bluetooth" -> Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+                    "display" -> Intent(Settings.ACTION_DISPLAY_SETTINGS)
+                    "sound" -> Intent(Settings.ACTION_SOUND_SETTINGS)
+                    "apps" -> Intent(Settings.ACTION_APPLICATION_SETTINGS)
+                    "location" -> Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                    "notifications" -> Intent(Settings.ACTION_ALL_APPS_NOTIFICATION_SETTINGS)
+                    "privacy" -> Intent(Settings.ACTION_PRIVACY_SETTINGS)
+                    "accessibility" -> Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                    else -> Intent(Settings.ACTION_SETTINGS)
+                }
+                context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                ActionResult.Success(name, "Opened System Settings.")
             }
             "open_battery_saver_settings" -> {
                 context.startActivity(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                "Opened Battery Saver settings."
+                ActionResult.Success(name, "Opened Battery Saver settings.")
             }
             "open_storage_settings" -> {
                 context.startActivity(Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                "Opened Storage settings."
+                ActionResult.Success(name, "Opened Storage settings.")
             }
             "open_security_settings" -> {
                 context.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                "Opened Security settings."
+                ActionResult.Success(name, "Opened Security settings.")
             }
             "open_date_time_settings" -> {
                 context.startActivity(Intent(Settings.ACTION_DATE_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                "Opened Date & Time settings."
+                ActionResult.Success(name, "Opened Date & Time settings.")
             }
             "open_developer_options" -> {
                 context.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                "Opened Developer Options."
+                ActionResult.Success(name, "Opened Developer Options.")
             }
             "open_airplane_mode_settings" -> {
                 context.startActivity(Intent(Settings.ACTION_AIRPLANE_MODE_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                "Opened Airplane Mode settings."
+                ActionResult.Success(name, "Opened Airplane Mode settings.")
             }
             "open_mobile_data_settings" -> {
                 context.startActivity(Intent(Settings.ACTION_DATA_ROAMING_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                "Opened Mobile Data settings."
+                ActionResult.Success(name, "Opened Mobile Data settings.")
             }
             "open_nfc_settings" -> {
                 context.startActivity(Intent(Settings.ACTION_NFC_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                "Opened NFC settings."
+                ActionResult.Success(name, "Opened NFC settings.")
             }
             "open_accessibility_settings" -> {
                 context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                "Opened Accessibility settings."
+                ActionResult.Success(name, "Opened Accessibility settings.")
             }
 
             "show_location_on_map", "show_map" -> {
                 val q = a.getString("query")
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(q)}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
-                "Opened map search for $q."
+                ActionResult.Success(name, "Opened map search for $q.")
             }
             "navigate_to_place" -> {
                 val dest = a.getString("destination")
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=${Uri.encode(dest)}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
-                "Started navigation to $dest."
+                ActionResult.Success(name, "Started navigation to $dest.")
             }
 
             "search_web" -> {
@@ -355,29 +474,49 @@ class ActionRegistry(private val context: Context) {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 context.startActivity(intent)
-                "Opened web search for “$q”."
+                ActionResult.Success(name, "Opened web search for “$q”.")
             }
             "open_url" -> {
                 val url = a.getString("url")
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
-                "Opened URL: $url"
+                ActionResult.Success(name, "Opened URL: $url")
             }
 
             "open_app" -> {
                 val appName = a.getString("app_name")
+                    .replace("<escape>", "")
+                    .replace("</escape>", "")
+                    .trim()
                 val pm = context.packageManager
-                val intent = pm.getLaunchIntentForPackage(appName) ?: run {
-                    // Try to match by app name in installed applications
-                    val packages = pm.getInstalledApplications(0)
-                    val matched = packages.firstOrNull { pm.getApplicationLabel(it).toString().equals(appName, ignoreCase = true) }
-                    matched?.let { pm.getLaunchIntentForPackage(it.packageName) }
+                val normalized = appName.lowercase(java.util.Locale.ROOT)
+                val targetPkg = when {
+                    normalized.contains("youtube") -> "com.google.android.youtube"
+                    normalized.contains("chrome") -> "com.android.chrome"
+                    normalized.contains("map") -> "com.google.android.apps.maps"
+                    normalized.contains("whatsapp") -> "com.whatsapp"
+                    normalized.contains("gmail") -> "com.google.android.gm"
+                    normalized.contains("clock") -> "com.google.android.deskclock"
+                    normalized.contains("camera") -> "com.android.camera2"
+                    normalized.contains("setting") -> "com.android.settings"
+                    else -> null
                 }
+                val intent = (if (targetPkg != null) pm.getLaunchIntentForPackage(targetPkg) else null)
+                    ?: pm.getLaunchIntentForPackage(appName)
+                    ?: run {
+                        val packages = pm.getInstalledApplications(0)
+                        val matched = packages.firstOrNull {
+                            pm.getApplicationLabel(it).toString().equals(appName, ignoreCase = true)
+                        } ?: packages.firstOrNull {
+                            pm.getApplicationLabel(it).toString().contains(appName, ignoreCase = true)
+                        }
+                        matched?.let { pm.getLaunchIntentForPackage(it.packageName) }
+                    }
                 if (intent != null) {
                     context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    "Opened app: $appName"
+                    ActionResult.Success(name, "Opened app: $appName")
                 } else {
-                    "App “$appName” is not installed or cannot be launched."
+                    ActionResult.ExecutionFailed(name, "App “$appName” is not installed or cannot be launched.")
                 }
             }
             "go_home_screen" -> {
@@ -386,7 +525,7 @@ class ActionRegistry(private val context: Context) {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
                 context.startActivity(intent)
-                "Navigated to Home Screen."
+                ActionResult.Success(name, "Navigated to Home Screen.")
             }
 
             "create_alarm" -> {
@@ -398,7 +537,7 @@ class ActionRegistry(private val context: Context) {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 context.startActivity(intent)
-                "Opened alarm clock to set alarm for ${a.getInt("hour")}:${String.format("%02d", a.getInt("minutes"))}."
+                ActionResult.Success(name, "Opened alarm clock for ${a.getInt("hour")}:${String.format("%02d", a.getInt("minutes"))}.")
             }
             "create_timer" -> {
                 val intent = Intent(AlarmClock.ACTION_SET_TIMER).apply {
@@ -408,41 +547,41 @@ class ActionRegistry(private val context: Context) {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 context.startActivity(intent)
-                "Started timer for ${a.getInt("duration_seconds")} seconds."
+                ActionResult.Success(name, "Started timer for ${a.getInt("duration_seconds")} seconds.")
             }
             "open_clock_stopwatch" -> {
                 val intent = Intent(AlarmClock.ACTION_SHOW_TIMERS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
-                "Opened Clock / Timers."
+                ActionResult.Success(name, "Opened Clock / Timers.")
             }
 
             "create_contact" -> {
-                val name = listOf(a.optString("first_name"), a.optString("last_name")).filter { it.isNotBlank() }.joinToString(" ")
+                val nameStr = listOf(a.optString("first_name"), a.optString("last_name")).filter { it.isNotBlank() }.joinToString(" ")
                 val i = Intent(Intent.ACTION_INSERT, ContactsContract.Contacts.CONTENT_URI).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                i.putExtra(ContactsContract.Intents.Insert.NAME, name)
+                i.putExtra(ContactsContract.Intents.Insert.NAME, nameStr)
                 if (a.has("phone_number")) i.putExtra(ContactsContract.Intents.Insert.PHONE, a.getString("phone_number"))
                 if (a.has("email")) i.putExtra(ContactsContract.Intents.Insert.EMAIL, a.getString("email"))
                 context.startActivity(i)
-                "Opened contact form for “$name”; review and save manually."
+                ActionResult.Success(name, "Opened contact form for “$nameStr”.")
             }
 
             "dial_phone_number" -> {
                 val phone = a.getString("phone_number")
                 val i = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${Uri.encode(phone)}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(i)
-                "Opened phone dialer for $phone."
+                ActionResult.Success(name, "Opened phone dialer for $phone.")
             }
 
             "create_calendar_event" -> {
-                val s = java.time.OffsetDateTime.parse(a.getString("start_iso")).toInstant().toEpochMilli()
-                val e = java.time.OffsetDateTime.parse(a.getString("end_iso")).toInstant().toEpochMilli()
+                val s = a.optLong("start_millis", System.currentTimeMillis() + 3600000L)
+                val e = a.optLong("end_millis", s + 3600000L)
                 val i = Intent(Intent.ACTION_INSERT).setData(CalendarContract.Events.CONTENT_URI).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 i.putExtra(CalendarContract.Events.TITLE, a.getString("title"))
                 i.putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, s)
                 i.putExtra(CalendarContract.EXTRA_EVENT_END_TIME, e)
                 if (a.has("description")) i.putExtra(CalendarContract.Events.DESCRIPTION, a.getString("description"))
                 context.startActivity(i)
-                "Opened calendar form for “${a.getString("title")}”; review and save manually."
+                ActionResult.Success(name, "Opened calendar event for “${a.getString("title")}”.")
             }
 
             "send_email", "compose_email" -> {
@@ -450,7 +589,7 @@ class ActionRegistry(private val context: Context) {
                 i.putExtra(Intent.EXTRA_SUBJECT, a.optString("subject"))
                 i.putExtra(Intent.EXTRA_TEXT, a.optString("body"))
                 context.startActivity(i)
-                "Opened email composer. Message was not sent silently."
+                ActionResult.Success(name, "Opened email composer for ${a.getString("to")}.")
             }
 
             "compose_sms" -> {
@@ -460,25 +599,25 @@ class ActionRegistry(private val context: Context) {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 context.startActivity(i)
-                "Opened SMS composer for $phone."
+                ActionResult.Success(name, "Opened SMS composer for $phone.")
             }
 
             "copy_to_clipboard" -> {
                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clip = ClipData.newPlainText("Assistant", a.getString("text"))
                 cm.setPrimaryClip(clip)
-                "Copied text to clipboard."
+                ActionResult.Success(name, "Copied text to clipboard.")
             }
 
             "take_photo" -> {
                 val i = Intent(MediaStore.ACTION_IMAGE_CAPTURE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(i)
-                "Opened Camera to take photo."
+                ActionResult.Success(name, "Opened Camera.")
             }
             "open_video_camera" -> {
                 val i = Intent(MediaStore.ACTION_VIDEO_CAPTURE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(i)
-                "Opened Camera to record video."
+                ActionResult.Success(name, "Opened Video Camera.")
             }
             "open_photo_gallery" -> {
                 val i = Intent(Intent.ACTION_VIEW).apply {
@@ -486,7 +625,7 @@ class ActionRegistry(private val context: Context) {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
                 context.startActivity(i)
-                "Opened Photo Gallery."
+                ActionResult.Success(name, "Opened Photo Gallery.")
             }
 
             "create_note" -> {
@@ -497,7 +636,7 @@ class ActionRegistry(private val context: Context) {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
                 context.startActivity(Intent.createChooser(i, "Save Note").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                "Opened note composer."
+                ActionResult.Success(name, "Opened note composer.")
             }
 
             "get_battery_status" -> {
@@ -506,35 +645,138 @@ class ActionRegistry(private val context: Context) {
                 val level = b?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
                 val scale = b?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1) ?: -1
                 val pct = if (level >= 0 && scale > 0) (level * 100 / scale) else -1
-                "Battery level is currently $pct%."
+                ActionResult.Success(name, "Battery level is currently $pct%.")
             }
             "get_device_info" -> {
-                "Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}, Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})."
+                ActionResult.Success(name, "Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}, Android ${android.os.Build.VERSION.RELEASE}.")
             }
             "check_current_time_date" -> {
-                "Current date and time: ${java.time.ZonedDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("EEEE, MMMM d, yyyy h:mm a"))}"
+                val nowStr = java.time.ZonedDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("EEEE, MMMM d, yyyy h:mm a"))
+                ActionResult.Success(name, "Current date and time: $nowStr")
             }
 
-            else -> "Blocked unsupported action: $name"
+            else -> ActionResult.UnsupportedAction(name)
         }
     } catch (t: Throwable) {
-        "Action failed: ${t.message ?: t.javaClass.simpleName}"
+        ActionResult.ExecutionFailed(name, t.message ?: t.javaClass.simpleName)
     }
 
     private var flashlightOn = false
-    private fun setFlashlight(state: Boolean): String {
-        val id = flashCameraId ?: return "Flashlight hardware is unavailable on this device."
-        return try {
-            cameraManager?.setTorchMode(id, state)
-            flashlightOn = state
-            if (state) "Turned on flashlight." else "Turned off flashlight."
-        } catch (e: Throwable) {
-            "Failed to toggle flashlight: ${e.message}"
+    private var torchCallbackRegistered = false
+
+    private val torchCallback = object : CameraManager.TorchCallback() {
+        override fun onTorchModeChanged(cameraId: String, enabled: Boolean) {
+            super.onTorchModeChanged(cameraId, enabled)
+            if (cameraId == flashCameraId) {
+                flashlightOn = enabled
+            }
+        }
+
+        override fun onTorchModeUnavailable(cameraId: String) {
+            super.onTorchModeUnavailable(cameraId)
+            if (cameraId == flashCameraId) {
+                flashlightOn = false
+            }
         }
     }
 
-    private fun toggleFlashlight(): String {
+    private fun registerTorchListener() {
+        if (!torchCallbackRegistered) {
+            try {
+                cameraManager?.registerTorchCallback(torchCallback, null)
+                torchCallbackRegistered = true
+            } catch (_: Throwable) {}
+        }
+    }
+
+    private fun getOrFindFlashCameraId(): String? {
+        if (flashCameraId != null) return flashCameraId
+        val cm = cameraManager ?: return null
+        return try {
+            for (id in cm.cameraIdList) {
+                val chars = cm.getCameraCharacteristics(id)
+                val flashAvailable = chars.get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE) ?: false
+                if (flashAvailable) {
+                    flashCameraId = id
+                    break
+                }
+            }
+            flashCameraId
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun setFlashlight(state: Boolean): ActionResult {
+        val toolName = if (state) "turn_on_flashlight" else "turn_off_flashlight"
+        val cm = cameraManager
+        if (cm == null) {
+            return ActionResult.ExecutionFailed(toolName, "CameraManager system service unavailable.")
+        }
+        val id = getOrFindFlashCameraId()
+            ?: return ActionResult.ExecutionFailed(toolName, "Flashlight hardware is unavailable on this device.")
+
+        registerTorchListener()
+        return try {
+            cm.setTorchMode(id, state)
+            flashlightOn = state
+            val msg = if (state) "Flashlight is on." else "Flashlight is off."
+            ActionResult.Success(toolName, msg)
+        } catch (e: android.hardware.camera2.CameraAccessException) {
+            ActionResult.ExecutionFailed(toolName, "Camera hardware error or in use: ${e.message}")
+        } catch (e: SecurityException) {
+            ActionResult.PermissionDenied(toolName, Manifest.permission.CAMERA)
+        } catch (e: Throwable) {
+            ActionResult.ExecutionFailed(toolName, "Failed to toggle flashlight: ${e.message ?: e.javaClass.simpleName}")
+        }
+    }
+
+    private fun toggleFlashlight(): ActionResult {
         return setFlashlight(!flashlightOn)
+    }
+
+    companion object {
+        fun parseTimeStringToHourMinute(str: String): Pair<Int, Int>? {
+            val clean = str.trim()
+            val colonMatch = Regex("(\\d{1,2}):(\\d{2})\\s*(AM|PM)?", RegexOption.IGNORE_CASE).find(clean)
+            if (colonMatch != null) {
+                var h = colonMatch.groupValues[1].toIntOrNull() ?: return null
+                val m = colonMatch.groupValues[2].toIntOrNull() ?: return null
+                val ampm = colonMatch.groupValues[3].uppercase()
+                if (ampm == "PM" && h < 12) h += 12
+                if (ampm == "AM" && h == 12) h = 0
+                return if (h in 0..23 && m in 0..59) Pair(h, m) else null
+            }
+            val ampmMatch = Regex("(\\d{1,2})\\s*(AM|PM)", RegexOption.IGNORE_CASE).find(clean)
+            if (ampmMatch != null) {
+                var h = ampmMatch.groupValues[1].toIntOrNull() ?: return null
+                val ampm = ampmMatch.groupValues[2].uppercase()
+                if (ampm == "PM" && h < 12) h += 12
+                if (ampm == "AM" && h == 12) h = 0
+                return if (h in 0..23) Pair(h, 0) else null
+            }
+            return null
+        }
+
+        fun parseDurationToSeconds(str: String): Int {
+            if (str.isBlank()) return -1
+            str.toIntOrNull()?.let { return it }
+            val minMatch = Regex("(\\d+)\\s*(m|min|minute|minutes)", RegexOption.IGNORE_CASE).find(str)
+            if (minMatch != null) {
+                val mins = minMatch.groupValues[1].toIntOrNull() ?: 0
+                return mins * 60
+            }
+            val secMatch = Regex("(\\d+)\\s*(s|sec|second|seconds)", RegexOption.IGNORE_CASE).find(str)
+            if (secMatch != null) {
+                return secMatch.groupValues[1].toIntOrNull() ?: 0
+            }
+            val hourMatch = Regex("(\\d+)\\s*(h|hr|hour|hours)", RegexOption.IGNORE_CASE).find(str)
+            if (hourMatch != null) {
+                val hours = hourMatch.groupValues[1].toIntOrNull() ?: 0
+                return hours * 3600
+            }
+            return -1
+        }
     }
 }
 

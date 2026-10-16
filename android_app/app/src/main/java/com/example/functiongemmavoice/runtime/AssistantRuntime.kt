@@ -23,7 +23,7 @@ data class ChatLine(
 
 sealed class TurnOutcome {
     data class TextReply(val text: String) : TurnOutcome()
-    data class ActionExecuted(val name: String, val result: String) : TurnOutcome()
+    data class ActionExecuted(val name: String, val result: ActionResult) : TurnOutcome()
     data class ConfirmationNeeded(val action: PreparedAction) : TurnOutcome()
     data class ActionBlocked(val reason: String) : TurnOutcome()
 }
@@ -105,10 +105,10 @@ class AssistantRuntime(private val context: Context) {
         conversation = eng.createConversation(
             ConversationConfig(
                 systemInstruction = Contents.of(
-                    "You are a helpful on-device voice assistant for Android. " +
-                    "Use available action tools when the user asks you to perform an action. " +
-                    "Support English and Telugu inquiries. " +
-                    "Never hallucinate missing parameters or execute destructive actions without confirmation."
+                    "You are FunctionGemma, a fast on-device Android voice assistant. " +
+                    "When the user asks to perform an action, you must immediately call the corresponding action tool. " +
+                    "Support English and Telugu inquiries concisely. " +
+                    "Never output raw HTML tags or echo error messages."
                 ),
                 tools = actions.schemas(),
                 automaticToolCalling = false
@@ -173,11 +173,100 @@ class AssistantRuntime(private val context: Context) {
                 val outcomes = mutableListOf<TurnOutcome>()
 
                 if (message.toolCalls.isEmpty()) {
-                    val text = message.contents.contents.filterIsInstance<com.google.ai.edge.litertlm.Content.Text>()
+                    val rawText = message.contents.contents.filterIsInstance<com.google.ai.edge.litertlm.Content.Text>()
                         .joinToString("\n") { it.text }
-                    val cleanText = if (text.isNotBlank()) text else message.toString()
+                    var cleanText = if (rawText.isNotBlank()) rawText else message.toString()
+
+                    // Check if model emitted tool call in text form
+                    val callRegex = Regex("""(?:<start_function_call>|<start_of_tool_call>)?(?:call:)?([a-zA-Z0-9_]+)\s*(?:\{([^}]*)\})?(?:<end_function_call>|<end_of_tool_call>)?""")
+                    val hasToolSyntax = cleanText.contains("call:") || cleanText.contains("function_call") || cleanText.contains("tool_call")
+                    if (hasToolSyntax) {
+                        val callMatch = callRegex.find(cleanText)
+                        if (callMatch != null) {
+                            val toolName = callMatch.groupValues[1]
+                            val rawArgs = if (callMatch.groupValues.size > 2 && callMatch.groupValues[2].isNotBlank()) {
+                                "{" + callMatch.groupValues[2] + "}"
+                            } else "{}"
+                            val argsJson = actions.parseArgs(rawArgs)
+                            val prepared = actions.prepare(toolName, argsJson)
+                            if (prepared != null) {
+                                if (prepared.requiresConfirmation) {
+                                    outcomes.add(TurnOutcome.ConfirmationNeeded(prepared))
+                                } else {
+                                    val execResult = actions.execute(prepared.name, prepared.args)
+                                    outcomes.add(TurnOutcome.ActionExecuted(prepared.name, execResult))
+                                }
+                                recordTurn(prompt, "[${prepared.name}]")
+                                return@withContext outcomes
+                            }
+                        }
+                    }
+
+                    // Check for hallucination / table token poisoning
+                    val isHallucination = cleanText.contains("<tr>", ignoreCase = true) ||
+                        cleanText.contains("Invalid argument:", ignoreCase = true) ||
+                        cleanText.contains("<start_of_turn>", ignoreCase = true) ||
+                        cleanText.contains("<end_of_turn>", ignoreCase = true) ||
+                        hasToolSyntax
+
+                    if (isHallucination) {
+                        // Immediately reset poisoned conversation session so subsequent turns are clean
+                        createNewConversation()
+
+                        // Check fallback action for common voice assistant commands
+                        val normalized = prompt.trim().lowercase(java.util.Locale.ROOT)
+                        val fallbackAction: PreparedAction? = when {
+                            normalized.contains("timer") -> {
+                                val sec = ActionRegistry.parseDurationToSeconds(normalized)
+                                val finalSec = if (sec > 0) sec else 300
+                                actions.prepare("create_timer", org.json.JSONObject().put("duration_seconds", finalSec))
+                            }
+                            normalized.contains("flashlight") && (normalized.contains("on") || normalized.contains("turn on")) -> {
+                                actions.prepare("turn_on_flashlight", org.json.JSONObject())
+                            }
+                            normalized.contains("flashlight") && (normalized.contains("off") || normalized.contains("turn off")) -> {
+                                actions.prepare("turn_off_flashlight", org.json.JSONObject())
+                            }
+                            normalized.contains("battery") -> {
+                                actions.prepare("get_battery_status", org.json.JSONObject())
+                            }
+                            normalized.contains("wifi") || normalized.contains("wi-fi") -> {
+                                actions.prepare("open_wifi_settings", org.json.JSONObject())
+                            }
+                            normalized.contains("youtube") -> {
+                                actions.prepare("open_app", org.json.JSONObject().put("app_name", "YouTube"))
+                            }
+                            else -> null
+                        }
+
+                        if (fallbackAction != null) {
+                            if (fallbackAction.requiresConfirmation) {
+                                outcomes.add(TurnOutcome.ConfirmationNeeded(fallbackAction))
+                            } else {
+                                val execResult = actions.execute(fallbackAction.name, fallbackAction.args)
+                                outcomes.add(TurnOutcome.ActionExecuted(fallbackAction.name, execResult))
+                            }
+                            return@withContext outcomes
+                        }
+
+                        cleanText = cleanText
+                            .replace("<start_function_call>", "")
+                            .replace("<end_function_call>", "")
+                            .replace("<start_of_tool_call>", "")
+                            .replace("<end_of_tool_call>", "")
+                            .replace("<start_of_turn>", "")
+                            .replace("<end_of_turn>", "")
+                            .replace(Regex("<[^>]*>"), "")
+                            .trim()
+                        if (cleanText.isBlank()) {
+                            cleanText = "I could not complete that request. Please try again."
+                        }
+                    }
+
                     outcomes.add(TurnOutcome.TextReply(cleanText))
-                    recordTurn(prompt, cleanText)
+                    if (!isHallucination) {
+                        recordTurn(prompt, cleanText)
+                    }
                     return@withContext outcomes
                 }
 
@@ -197,7 +286,7 @@ class AssistantRuntime(private val context: Context) {
                     } else {
                         val execResult = actions.execute(prepared.name, prepared.args)
                         outcomes.add(TurnOutcome.ActionExecuted(prepared.name, execResult))
-                        actionDescriptions.add("[${prepared.name}] $execResult")
+                        actionDescriptions.add("[${prepared.name}] ${execResult.userFacingMessage()}")
                     }
                 }
 
@@ -222,13 +311,17 @@ class AssistantRuntime(private val context: Context) {
     }
 
     private fun recordTurn(userPrompt: String, assistantReply: String) {
+        if (assistantReply.contains("<tr>", ignoreCase = true) ||
+            assistantReply.contains("Invalid argument:", ignoreCase = true)) {
+            return
+        }
         historyTurns.add(userPrompt to assistantReply)
         while (historyTurns.size > maxHistoryTurns) {
             historyTurns.removeAt(0)
         }
     }
 
-    fun executeConfirmedAction(action: PreparedAction): String {
+    fun executeConfirmedAction(action: PreparedAction): ActionResult {
         return actions.execute(action.name, action.args)
     }
 
