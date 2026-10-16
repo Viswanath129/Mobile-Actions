@@ -26,7 +26,9 @@ data class UiMessage(
     val actionTool: String? = null,
     val actionResult: ActionResult? = null,
     val executionDurationMs: Long? = null,
-    val isStreaming: Boolean = false
+    val isStreaming: Boolean = false,
+    val requestId: String? = null,
+    val timingSummary: String? = null
 )
 
 data class AssistantUiState(

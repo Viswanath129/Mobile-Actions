@@ -25,6 +25,7 @@ class InferenceEngineManager private constructor(private val appContext: Context
     private val maxHistoryTurns = 3
 
     val actionRegistry = ActionRegistry(appContext)
+    val fastRouter = DeterministicCommandRouter(actionRegistry)
 
     companion object {
         @Volatile
@@ -135,165 +136,244 @@ class InferenceEngineManager private constructor(private val appContext: Context
     }
 
     /**
-     * Executes prompt inference and dispatches validated tools.
+     * Executes prompt inference with full request context tracking, deterministic fast routing,
+     * and strict stage timing isolation.
      */
-    suspend fun handlePrompt(prompt: String): List<TurnOutcome> = withContext(Dispatchers.IO) {
+    suspend fun processRequest(context: RequestContext): List<TurnOutcome> = withContext(Dispatchers.IO) {
         lifecycleMutex.withLock {
-            val eng = engine ?: throw AssistantException.ModelNotLoaded()
-            var conv = conversation ?: run {
-                createNewConversationInternal()
-                conversation!!
+            if (context.isCancelled) {
+                return@withContext emptyList()
             }
 
-            val budget = getBudgetStatus()
-            val promptTokens = estimateTokens(prompt)
-            if (promptTokens > budget.remainingBudget && historyTurns.isNotEmpty()) {
-                historyTurns.clear()
-                createNewConversationInternal()
-                conv = conversation!!
+            // Stage 1: Input Normalization
+            context.transitionTo(RequestState.NORMALIZING)
+            val normalized = context.rawInput.trim()
+            if (normalized.isBlank()) {
+                context.markFailed(AssistantError.InvalidInput("Empty input command"))
+                return@withContext listOf(
+                    TurnOutcome.TextReply("Please say or type a command.", context.requestId, context.timings)
+                )
             }
+            context.normalizedInput = normalized
 
-            try {
-                val message = conv.sendMessage(prompt)
-                val outcomes = mutableListOf<TurnOutcome>()
+            // Stage 2: Routing via Deterministic Fast Path
+            context.transitionTo(RequestState.ROUTING)
+            val decision = fastRouter.route(normalized)
 
-                if (message.toolCalls.isEmpty()) {
-                    val rawText = message.contents.contents.filterIsInstance<com.google.ai.edge.litertlm.Content.Text>()
-                        .joinToString("\n") { it.text }
-                    var cleanText = if (rawText.isNotBlank()) rawText else message.toString()
+            when (decision) {
+                is FastPathDecision.DirectAction -> {
+                    context.transitionTo(RequestState.FAST_PATH)
+                    context.transitionTo(RequestState.VALIDATING)
 
-                    // Check if model emitted tool call in text form: <start_function_call>call:turn_on_flashlight{}<end_function_call>
-                    val callRegex = Regex("""(?:<start_function_call>|<start_of_tool_call>)?(?:call:)?([a-zA-Z0-9_]+)\s*(?:\{([^}]*)\})?(?:<end_function_call>|<end_of_tool_call>)?""")
-                    val hasToolSyntax = cleanText.contains("call:") || cleanText.contains("function_call") || cleanText.contains("tool_call")
-                    if (hasToolSyntax) {
-                        val callMatch = callRegex.find(cleanText)
-                        if (callMatch != null) {
-                            val toolName = callMatch.groupValues[1]
-                            val rawArgs = if (callMatch.groupValues.size > 2 && callMatch.groupValues[2].isNotBlank()) {
-                                "{" + callMatch.groupValues[2] + "}"
-                            } else "{}"
-                            val argsJson = actionRegistry.parseArgs(rawArgs)
-                            val prepared = actionRegistry.prepare(toolName, argsJson)
-                            if (prepared != null) {
-                                if (prepared.requiresConfirmation) {
-                                    outcomes.add(TurnOutcome.ConfirmationNeeded(prepared))
-                                } else {
-                                    val execResult = actionRegistry.execute(prepared.name, prepared.args)
-                                    outcomes.add(TurnOutcome.ActionExecuted(prepared.name, execResult))
-                                }
-                                recordTurn(prompt, "[${prepared.name}]")
-                                return@withContext outcomes
-                            }
-                        }
+                    val outcomes = mutableListOf<TurnOutcome>()
+                    // Check confirmation requirements
+                    val needsConfirmation = decision.actions.firstOrNull { it.requiresConfirmation }
+                    if (needsConfirmation != null) {
+                        context.transitionTo(RequestState.NEEDS_CONFIRMATION)
+                        outcomes.add(TurnOutcome.ConfirmationNeeded(needsConfirmation, context.requestId, context.timings))
+                        return@withContext outcomes
                     }
 
-                    // Check for hallucination / table token poisoning
-                    val isHallucination = cleanText.contains("<tr>", ignoreCase = true) ||
-                        cleanText.contains("Invalid argument:", ignoreCase = true) ||
-                        cleanText.contains("<start_of_turn>", ignoreCase = true) ||
-                        cleanText.contains("<end_of_turn>", ignoreCase = true) ||
-                        hasToolSyntax
+                    context.transitionTo(RequestState.EXECUTING)
+                    for (action in decision.actions) {
+                        val execResult = actionRegistry.execute(action.name, action.args)
+                        context.executionResults.add(action.name to execResult)
+                        outcomes.add(TurnOutcome.ActionExecuted(action.name, execResult, context.requestId, context.timings))
+                    }
 
-                    if (isHallucination) {
+                    context.transitionTo(RequestState.VERIFYING)
+                    context.markCompleted()
+                    return@withContext outcomes
+                }
+
+                is FastPathDecision.Negated -> {
+                    context.transitionTo(RequestState.FAST_PATH)
+                    context.markCompleted(decision.explanation)
+                    return@withContext listOf(
+                        TurnOutcome.TextReply(decision.explanation, context.requestId, context.timings)
+                    )
+                }
+
+                is FastPathDecision.Ambiguous -> {
+                    context.transitionTo(RequestState.FAST_PATH)
+                    context.markCompleted(decision.clarificationQuestion)
+                    return@withContext listOf(
+                        TurnOutcome.TextReply(decision.clarificationQuestion, context.requestId, context.timings)
+                    )
+                }
+
+                is FastPathDecision.Unsupported -> {
+                    context.transitionTo(RequestState.FAST_PATH)
+                    context.markCompleted(decision.reason)
+                    return@withContext listOf(
+                        TurnOutcome.ActionBlocked(decision.reason, context.requestId, context.timings)
+                    )
+                }
+
+                is FastPathDecision.FallbackToModel -> {
+                    // Proceed to FunctionGemma on-device model inference
+                    context.transitionTo(RequestState.MODEL_RUNNING)
+                    val eng = engine ?: throw AssistantException.ModelNotLoaded()
+                    var conv = conversation ?: run {
                         createNewConversationInternal()
+                        conversation!!
+                    }
 
-                        val normalized = prompt.trim().lowercase(java.util.Locale.ROOT)
-                        val fallbackAction: PreparedAction? = when {
-                            normalized.contains("timer") -> {
-                                val sec = ActionRegistry.parseDurationToSeconds(normalized)
-                                val finalSec = if (sec > 0) sec else 300
-                                actionRegistry.prepare("create_timer", JSONObject().put("duration_seconds", finalSec))
-                            }
-                            normalized.contains("flashlight") && (normalized.contains("on") || normalized.contains("turn on")) -> {
-                                actionRegistry.prepare("turn_on_flashlight", JSONObject())
-                            }
-                            normalized.contains("flashlight") && (normalized.contains("off") || normalized.contains("turn off")) -> {
-                                actionRegistry.prepare("turn_off_flashlight", JSONObject())
-                            }
-                            normalized.contains("battery") -> {
-                                actionRegistry.prepare("get_battery_status", JSONObject())
-                            }
-                            normalized.contains("bluetooth") -> {
-                                actionRegistry.prepare("open_bluetooth_pairing", JSONObject())
-                            }
-                            normalized.contains("wifi") || normalized.contains("wi-fi") -> {
-                                actionRegistry.prepare("open_wifi_settings", JSONObject())
-                            }
-                            normalized.contains("youtube") -> {
-                                actionRegistry.prepare("open_app", JSONObject().put("app_name", "YouTube"))
-                            }
-                            else -> null
-                        }
+                    val budget = getBudgetStatus()
+                    val promptTokens = estimateTokens(normalized)
+                    if (promptTokens > budget.remainingBudget && historyTurns.isNotEmpty()) {
+                        historyTurns.clear()
+                        createNewConversationInternal()
+                        conv = conversation!!
+                    }
 
-                        if (fallbackAction != null) {
-                            if (fallbackAction.requiresConfirmation) {
-                                outcomes.add(TurnOutcome.ConfirmationNeeded(fallbackAction))
-                            } else {
-                                val execResult = actionRegistry.execute(fallbackAction.name, fallbackAction.args)
-                                outcomes.add(TurnOutcome.ActionExecuted(fallbackAction.name, execResult))
+                    try {
+                        val message = conv.sendMessage(normalized)
+                        val outcomes = mutableListOf<TurnOutcome>()
+
+                        if (message.toolCalls.isEmpty()) {
+                            val rawText = message.contents.contents.filterIsInstance<com.google.ai.edge.litertlm.Content.Text>()
+                                .joinToString("\n") { it.text }
+                            var cleanText = if (rawText.isNotBlank()) rawText else message.toString()
+
+                            // Check if model emitted tool call in text form: <start_function_call>call:turn_on_flashlight{}<end_function_call>
+                            val callRegex = Regex("""(?:<start_function_call>|<start_of_tool_call>)?(?:call:)?([a-zA-Z0-9_]+)\s*(?:\{([^}]*)\})?(?:<end_function_call>|<end_of_tool_call>)?""")
+                            val hasToolSyntax = cleanText.contains("call:") || cleanText.contains("function_call") || cleanText.contains("tool_call")
+                            if (hasToolSyntax) {
+                                val callMatch = callRegex.find(cleanText)
+                                if (callMatch != null) {
+                                    val toolName = callMatch.groupValues[1]
+                                    val rawArgs = if (callMatch.groupValues.size > 2 && callMatch.groupValues[2].isNotBlank()) {
+                                        "{" + callMatch.groupValues[2] + "}"
+                                    } else "{}"
+                                    val argsJson = actionRegistry.parseArgs(rawArgs)
+
+                                    context.transitionTo(RequestState.VALIDATING)
+                                    val prepared = actionRegistry.prepare(toolName, argsJson)
+                                    if (prepared != null) {
+                                        if (prepared.requiresConfirmation) {
+                                            context.transitionTo(RequestState.NEEDS_CONFIRMATION)
+                                            outcomes.add(TurnOutcome.ConfirmationNeeded(prepared, context.requestId, context.timings))
+                                        } else {
+                                            context.transitionTo(RequestState.EXECUTING)
+                                            val execResult = actionRegistry.execute(prepared.name, prepared.args)
+                                            context.executionResults.add(prepared.name to execResult)
+                                            context.transitionTo(RequestState.VERIFYING)
+                                            outcomes.add(TurnOutcome.ActionExecuted(prepared.name, execResult, context.requestId, context.timings))
+                                            context.markCompleted()
+                                        }
+                                        // Reset conversation to prevent KV cache contamination across turns
+                                        createNewConversationInternal()
+                                        recordTurn(normalized, "[${prepared.name}]")
+                                        return@withContext outcomes
+                                    }
+                                }
+                            }
+
+                            // Check for hallucination / table token poisoning
+                            val isHallucination = cleanText.contains("<tr>", ignoreCase = true) ||
+                                cleanText.contains("Invalid argument:", ignoreCase = true) ||
+                                cleanText.contains("<start_of_turn>", ignoreCase = true) ||
+                                cleanText.contains("<end_of_turn>", ignoreCase = true) ||
+                                hasToolSyntax
+
+                            if (isHallucination) {
+                                createNewConversationInternal()
+
+                                cleanText = cleanText
+                                    .replace("<start_function_call>", "")
+                                    .replace("<end_function_call>", "")
+                                    .replace("<start_of_tool_call>", "")
+                                    .replace("<end_of_tool_call>", "")
+                                    .replace("<start_of_turn>", "")
+                                    .replace("<end_of_turn>", "")
+                                    .replace(Regex("<[^>]*>"), "")
+                                    .trim()
+                                if (cleanText.isBlank()) {
+                                    cleanText = "I could not complete that request. Please try again."
+                                }
+                            }
+
+                            context.markCompleted(cleanText)
+                            outcomes.add(TurnOutcome.TextReply(cleanText, context.requestId, context.timings))
+                            if (!isHallucination) {
+                                recordTurn(normalized, cleanText)
                             }
                             return@withContext outcomes
                         }
 
-                        cleanText = cleanText
-                            .replace("<start_function_call>", "")
-                            .replace("<end_function_call>", "")
-                            .replace("<start_of_tool_call>", "")
-                            .replace("<end_of_tool_call>", "")
-                            .replace("<start_of_turn>", "")
-                            .replace("<end_of_turn>", "")
-                            .replace(Regex("<[^>]*>"), "")
-                            .trim()
-                        if (cleanText.isBlank()) {
-                            cleanText = "I could not complete that request. Please try again."
+                        val actionDescriptions = mutableListOf<String>()
+                        context.transitionTo(RequestState.VALIDATING)
+
+                        for (call in message.toolCalls) {
+                            val rawArgs = call.arguments.toString()
+                            val args = actionRegistry.parseArgs(rawArgs)
+                            val prepared = actionRegistry.prepare(call.name, args)
+
+                            if (prepared == null) {
+                                val reason = "Blocked unsupported or invalid tool: ${call.name}"
+                                outcomes.add(TurnOutcome.ActionBlocked(reason, context.requestId, context.timings))
+                                actionDescriptions.add(reason)
+                            } else if (prepared.requiresConfirmation) {
+                                context.transitionTo(RequestState.NEEDS_CONFIRMATION)
+                                outcomes.add(TurnOutcome.ConfirmationNeeded(prepared, context.requestId, context.timings))
+                                actionDescriptions.add("Requested confirmation for ${prepared.name}")
+                            } else {
+                                if (context.state != RequestState.EXECUTING) {
+                                    context.transitionTo(RequestState.EXECUTING)
+                                }
+                                val execResult = actionRegistry.execute(prepared.name, prepared.args)
+                                context.executionResults.add(prepared.name to execResult)
+                                outcomes.add(TurnOutcome.ActionExecuted(prepared.name, execResult, context.requestId, context.timings))
+                                actionDescriptions.add("[${prepared.name}] ${execResult.userFacingMessage()}")
+                            }
+                        }
+
+                        if (context.state == RequestState.EXECUTING) {
+                            context.transitionTo(RequestState.VERIFYING)
+                        }
+                        if (!context.state.isTerminal() && context.state != RequestState.NEEDS_CONFIRMATION) {
+                            context.markCompleted()
+                        }
+
+                        // Clean conversation state so previous tool call is never replayed in KV cache
+                        createNewConversationInternal()
+                        recordTurn(normalized, actionDescriptions.joinToString("; "))
+                        outcomes
+                    } catch (t: Throwable) {
+                        val rawMsg = t.message ?: t.toString()
+                        createNewConversationInternal()
+                        historyTurns.clear()
+
+                        val error = when {
+                            rawMsg.contains("5906 >= 4096", ignoreCase = true) || rawMsg.contains("Exceeding the maximum number of tokens", ignoreCase = true) ->
+                                AssistantError.ContextLimitExceeded(4096, 5906)
+                            rawMsg.contains("state: 7", ignoreCase = true) || rawMsg.contains("Task failed with state", ignoreCase = true) ->
+                                AssistantError.ModelGenerationFailed("LiteRT-LM native task failed with state 7: $rawMsg")
+                            else ->
+                                AssistantError.InternalError(rawMsg)
+                        }
+                        context.markFailed(error)
+
+                        if (rawMsg.contains("5906 >= 4096", ignoreCase = true) || rawMsg.contains("Exceeding the maximum number of tokens", ignoreCase = true)) {
+                            throw AssistantException.ContextBudgetExceeded(4096, 5906, t)
+                        } else if (rawMsg.contains("state: 7", ignoreCase = true) || rawMsg.contains("Task failed with state", ignoreCase = true)) {
+                            throw AssistantException.NativeEngineError(7, rawMsg, t)
+                        } else {
+                            throw AssistantException.UnknownInferenceError(rawMsg, t)
                         }
                     }
-
-                    outcomes.add(TurnOutcome.TextReply(cleanText))
-                    if (!isHallucination) {
-                        recordTurn(prompt, cleanText)
-                    }
-                    return@withContext outcomes
-                }
-
-                val actionDescriptions = mutableListOf<String>()
-                for (call in message.toolCalls) {
-                    val rawArgs = call.arguments.toString()
-                    val args = actionRegistry.parseArgs(rawArgs)
-                    val prepared = actionRegistry.prepare(call.name, args)
-
-                    if (prepared == null) {
-                        val reason = "Blocked unsupported or invalid tool: ${call.name}"
-                        outcomes.add(TurnOutcome.ActionBlocked(reason))
-                        actionDescriptions.add(reason)
-                    } else if (prepared.requiresConfirmation) {
-                        outcomes.add(TurnOutcome.ConfirmationNeeded(prepared))
-                        actionDescriptions.add("Requested confirmation for ${prepared.name}")
-                    } else {
-                        val execResult = actionRegistry.execute(prepared.name, prepared.args)
-                        outcomes.add(TurnOutcome.ActionExecuted(prepared.name, execResult))
-                        actionDescriptions.add("[${prepared.name}] ${execResult.userFacingMessage()}")
-                    }
-                }
-
-                // Clean conversation history state so previous tool call is never replayed
-                createNewConversationInternal()
-                recordTurn(prompt, actionDescriptions.joinToString("; "))
-                outcomes
-            } catch (t: Throwable) {
-                val rawMsg = t.message ?: t.toString()
-                createNewConversationInternal()
-                historyTurns.clear()
-
-                if (rawMsg.contains("5906 >= 4096", ignoreCase = true) || rawMsg.contains("Exceeding the maximum number of tokens", ignoreCase = true)) {
-                    throw AssistantException.ContextBudgetExceeded(4096, 5906, t)
-                } else if (rawMsg.contains("state: 7", ignoreCase = true) || rawMsg.contains("Task failed with state", ignoreCase = true)) {
-                    throw AssistantException.NativeEngineError(7, rawMsg, t)
-                } else {
-                    throw AssistantException.UnknownInferenceError(rawMsg, t)
                 }
             }
         }
+    }
+
+    /**
+     * Backward-compatible handlePrompt delegating to request lifecycle processor.
+     */
+    suspend fun handlePrompt(prompt: String): List<TurnOutcome> {
+        val context = RequestContext(rawInput = prompt)
+        return processRequest(context)
     }
 
     private fun recordTurn(userPrompt: String, assistantReply: String) {

@@ -428,11 +428,13 @@ private fun ChatMessageItem(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (message.executionDurationMs != null) {
+                            if (message.timingSummary != null || message.executionDurationMs != null) {
+                                val label = message.timingSummary ?: "${message.executionDurationMs}ms"
                                 Text(
-                                    text = "${message.executionDurationMs}ms",
+                                    text = label,
                                     fontSize = 10.sp,
-                                    color = TextMuted
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (label.contains("FastPath")) Color(0xFF10B981) else TextMuted
                                 )
                             } else {
                                 Spacer(modifier = Modifier.width(1.dp))

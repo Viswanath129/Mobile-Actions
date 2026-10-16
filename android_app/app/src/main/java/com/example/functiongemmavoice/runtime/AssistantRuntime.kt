@@ -21,11 +21,34 @@ data class ChatLine(
     val technicalDetails: String? = null
 )
 
-sealed class TurnOutcome {
-    data class TextReply(val text: String) : TurnOutcome()
-    data class ActionExecuted(val name: String, val result: ActionResult) : TurnOutcome()
-    data class ConfirmationNeeded(val action: PreparedAction) : TurnOutcome()
-    data class ActionBlocked(val reason: String) : TurnOutcome()
+sealed class TurnOutcome(
+    open val requestId: String? = null,
+    open val timings: RequestTimings? = null
+) {
+    data class TextReply(
+        val text: String,
+        override val requestId: String? = null,
+        override val timings: RequestTimings? = null
+    ) : TurnOutcome(requestId, timings)
+
+    data class ActionExecuted(
+        val name: String,
+        val result: ActionResult,
+        override val requestId: String? = null,
+        override val timings: RequestTimings? = null
+    ) : TurnOutcome(requestId, timings)
+
+    data class ConfirmationNeeded(
+        val action: PreparedAction,
+        override val requestId: String? = null,
+        override val timings: RequestTimings? = null
+    ) : TurnOutcome(requestId, timings)
+
+    data class ActionBlocked(
+        val reason: String,
+        override val requestId: String? = null,
+        override val timings: RequestTimings? = null
+    ) : TurnOutcome(requestId, timings)
 }
 
 sealed class AssistantException(

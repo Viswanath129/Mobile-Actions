@@ -273,4 +273,172 @@ class ActionRegistryTest {
         val teluguTokens = manager.estimateTokens("నా ఫోన్ బ్యాటరీ ఎంత?")
         assertTrue(teluguTokens in 5..20)
     }
+
+    @Test
+    fun testDeterministicFastPathBatteryNeverReturnsFlashlight() {
+        val registry = ActionRegistry(MockContext())
+        val router = com.example.functiongemmavoice.runtime.DeterministicCommandRouter(registry)
+
+        val queries = listOf(
+            "What is my battery level?",
+            "battery status",
+            "check battery",
+            "how much battery is left",
+            "బ్యాటరీ ఎంత ఉంది"
+        )
+        for (q in queries) {
+            val decision = router.route(q)
+            assertTrue("Query '$q' should resolve to DirectAction", decision is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+            val actions = (decision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions
+            assertEquals(1, actions.size)
+            assertEquals("get_battery_status", actions[0].name)
+            assertNotEquals("turn_off_flashlight", actions[0].name)
+            assertNotEquals("turn_on_flashlight", actions[0].name)
+        }
+    }
+
+    @Test
+    fun testDeterministicFastPathFlashlightNeverTriggersTimer() {
+        val registry = ActionRegistry(MockContext())
+        val router = com.example.functiongemmavoice.runtime.DeterministicCommandRouter(registry)
+
+        val decision = router.route("Turn on the flashlight")
+        assertTrue(decision is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        val actions = (decision as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions
+        assertEquals(1, actions.size)
+        assertEquals("turn_on_flashlight", actions[0].name)
+        assertFalse(actions[0].args.has("duration_seconds"))
+    }
+
+    @Test
+    fun testDeterministicFastPathNegationRejection() {
+        val registry = ActionRegistry(MockContext())
+        val router = com.example.functiongemmavoice.runtime.DeterministicCommandRouter(registry)
+
+        val negatedFlashlight = router.route("Do not turn on the flashlight")
+        assertTrue(negatedFlashlight is com.example.functiongemmavoice.runtime.FastPathDecision.Negated)
+
+        val dontFlash = router.route("Don't turn on flashlight")
+        assertTrue(dontFlash is com.example.functiongemmavoice.runtime.FastPathDecision.Negated)
+
+        val teluguNegated = router.route("లైట్ ఆన్ చేయవద్దు")
+        assertTrue(teluguNegated is com.example.functiongemmavoice.runtime.FastPathDecision.Negated)
+    }
+
+    @Test
+    fun testDeterministicFastPathInterrogativeFallback() {
+        val registry = ActionRegistry(MockContext())
+        val router = com.example.functiongemmavoice.runtime.DeterministicCommandRouter(registry)
+
+        val whyQuery = router.route("Why should I turn on the flashlight?")
+        assertTrue("Interrogative query should fall back to model", whyQuery is com.example.functiongemmavoice.runtime.FastPathDecision.FallbackToModel)
+
+        val howQuery = router.route("How to turn on flashlight")
+        assertTrue("How-to query should fall back to model", howQuery is com.example.functiongemmavoice.runtime.FastPathDecision.FallbackToModel)
+    }
+
+    @Test
+    fun testDeterministicFastPathAmbiguousTimer() {
+        val registry = ActionRegistry(MockContext())
+        val router = com.example.functiongemmavoice.runtime.DeterministicCommandRouter(registry)
+
+        val ambiguous = router.route("Set a timer")
+        assertTrue("Timer without duration should be ambiguous", ambiguous is com.example.functiongemmavoice.runtime.FastPathDecision.Ambiguous)
+        val msg = (ambiguous as com.example.functiongemmavoice.runtime.FastPathDecision.Ambiguous).clarificationQuestion
+        assertTrue(msg.contains("specify"))
+
+        val specific = router.route("Set a timer for 5 minutes")
+        assertTrue(specific is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        val action = (specific as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions[0]
+        assertEquals("create_timer", action.name)
+        assertEquals(300, action.args.getInt("duration_seconds"))
+    }
+
+    @Test
+    fun testDeterministicFastPathUnsupportedService() {
+        val registry = ActionRegistry(MockContext())
+        val router = com.example.functiongemmavoice.runtime.DeterministicCommandRouter(registry)
+
+        val spotify = router.route("Play Taylor Swift on Spotify")
+        assertTrue(spotify is com.example.functiongemmavoice.runtime.FastPathDecision.Unsupported)
+        assertTrue((spotify as com.example.functiongemmavoice.runtime.FastPathDecision.Unsupported).reason.contains("Spotify"))
+    }
+
+    @Test
+    fun testDeterministicFastPathCompoundCommand() {
+        val registry = ActionRegistry(MockContext())
+        val router = com.example.functiongemmavoice.runtime.DeterministicCommandRouter(registry)
+
+        val compound = router.route("Turn on the flashlight and open YouTube")
+        assertTrue(compound is com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction)
+        val actions = (compound as com.example.functiongemmavoice.runtime.FastPathDecision.DirectAction).actions
+        assertEquals(2, actions.size)
+        assertEquals("turn_on_flashlight", actions[0].name)
+        assertEquals("open_app", actions[1].name)
+        assertEquals("YouTube", actions[1].args.getString("app_name"))
+    }
+
+    @Test
+    fun testRequestContextLegalTransitions() {
+        val req = com.example.functiongemmavoice.runtime.RequestContext(rawInput = "Turn on the flashlight")
+        assertEquals(com.example.functiongemmavoice.runtime.RequestState.RECEIVED, req.state)
+
+        req.transitionTo(com.example.functiongemmavoice.runtime.RequestState.NORMALIZING)
+        assertEquals(com.example.functiongemmavoice.runtime.RequestState.NORMALIZING, req.state)
+
+        req.transitionTo(com.example.functiongemmavoice.runtime.RequestState.ROUTING)
+        assertEquals(com.example.functiongemmavoice.runtime.RequestState.ROUTING, req.state)
+
+        req.transitionTo(com.example.functiongemmavoice.runtime.RequestState.FAST_PATH)
+        assertEquals(com.example.functiongemmavoice.runtime.RequestState.FAST_PATH, req.state)
+        assertTrue(req.timings.isFastPath)
+
+        req.transitionTo(com.example.functiongemmavoice.runtime.RequestState.VALIDATING)
+        req.transitionTo(com.example.functiongemmavoice.runtime.RequestState.EXECUTING)
+        req.transitionTo(com.example.functiongemmavoice.runtime.RequestState.VERIFYING)
+        req.markCompleted()
+
+        assertEquals(com.example.functiongemmavoice.runtime.RequestState.COMPLETED, req.state)
+        assertTrue(req.state.isTerminal())
+    }
+
+    @Test(expected = com.example.functiongemmavoice.runtime.IllegalStateTransitionException::class)
+    fun testRequestContextIllegalTransitionThrows() {
+        val req = com.example.functiongemmavoice.runtime.RequestContext(rawInput = "Turn on flashlight")
+        req.transitionTo(com.example.functiongemmavoice.runtime.RequestState.NORMALIZING)
+        // Direct transition from NORMALIZING to EXECUTING is illegal and must throw
+        req.transitionTo(com.example.functiongemmavoice.runtime.RequestState.EXECUTING)
+    }
+
+    @Test
+    fun testRequestContextCancellationIsolation() {
+        val reqA = com.example.functiongemmavoice.runtime.RequestContext(rawInput = "Query A")
+        val reqB = com.example.functiongemmavoice.runtime.RequestContext(rawInput = "Query B")
+
+        assertNotEquals(reqA.requestId, reqB.requestId)
+
+        reqA.cancel("User aborted")
+        assertTrue(reqA.isCancelled)
+        assertEquals(com.example.functiongemmavoice.runtime.RequestState.CANCELLED, reqA.state)
+        assertFalse(reqB.isCancelled)
+        assertEquals(com.example.functiongemmavoice.runtime.RequestState.RECEIVED, reqB.state)
+    }
+
+    @Test
+    fun testAssistantErrorTaxonomy() {
+        val errors = listOf(
+            com.example.functiongemmavoice.runtime.AssistantError.InvalidInput("bad input"),
+            com.example.functiongemmavoice.runtime.AssistantError.UnsupportedIntent("music"),
+            com.example.functiongemmavoice.runtime.AssistantError.UnknownTool("fake_tool"),
+            com.example.functiongemmavoice.runtime.AssistantError.PermissionDenied("camera", "android.permission.CAMERA"),
+            com.example.functiongemmavoice.runtime.AssistantError.ContextLimitExceeded(4096, 5000),
+            com.example.functiongemmavoice.runtime.AssistantError.ResultCorrelationFailure("id1", "id2")
+        )
+
+        for (err in errors) {
+            assertNotNull(err.code)
+            assertTrue(err.userFacingMessage.isNotBlank())
+            assertTrue(err.technicalDetails.isNotBlank())
+        }
+    }
 }

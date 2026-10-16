@@ -137,11 +137,27 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    private var lastSubmittedText: String? = null
+    private var lastSubmitTimeMs: Long = 0L
+
     fun submitCommand(text: String, onSpeak: ((String) -> Unit)? = null) {
         val trimmed = text.trim()
-        if (trimmed.isBlank() || _uiState.value.isBusy) return
+        val now = com.example.functiongemmavoice.runtime.MonotonicClock.elapsedRealtimeMs()
 
-        val userMsg = UiMessage(sender = MessageSender.USER, text = trimmed)
+        // Debounce exact duplicate submissions within 500ms
+        if (trimmed.isBlank() || _uiState.value.isBusy || (trimmed == lastSubmittedText && (now - lastSubmitTimeMs) < 500L)) {
+            return
+        }
+        lastSubmittedText = trimmed
+        lastSubmitTimeMs = now
+
+        val request = com.example.functiongemmavoice.runtime.RequestContext(rawInput = trimmed)
+        val userMsg = UiMessage(
+            id = request.requestId,
+            sender = MessageSender.USER,
+            text = trimmed,
+            requestId = request.requestId
+        )
 
         _uiState.update { current ->
             val updated = (current.messages + userMsg).takeLast(maxVisibleMessages)
@@ -149,15 +165,16 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 messages = updated,
                 isBusy = true,
                 statusState = AssistantStatusState.PROCESSING,
-                statusLabel = "Thinking & Validating…"
+                statusLabel = "Routing & Validating…"
             )
         }
 
         viewModelScope.launch(Dispatchers.IO) {
             val startNs = System.nanoTime()
             try {
-                val outcomes = engineManager.handlePrompt(trimmed)
+                val outcomes = engineManager.processRequest(request)
                 val durationMs = (System.nanoTime() - startNs) / 1_000_000
+                val timingSummary = request.timings.summary()
 
                 val newMessages = mutableListOf<UiMessage>()
                 var speechTextToEmit: String? = null
@@ -169,7 +186,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                                 UiMessage(
                                     sender = MessageSender.ASSISTANT,
                                     text = outcome.text,
-                                    executionDurationMs = durationMs
+                                    executionDurationMs = durationMs,
+                                    requestId = outcome.requestId ?: request.requestId,
+                                    timingSummary = timingSummary
                                 )
                             )
                             speechTextToEmit = outcome.text
@@ -182,7 +201,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                                     text = userMsgText,
                                     actionTool = outcome.name,
                                     actionResult = outcome.result,
-                                    executionDurationMs = durationMs
+                                    executionDurationMs = durationMs,
+                                    requestId = outcome.requestId ?: request.requestId,
+                                    timingSummary = timingSummary
                                 )
                             )
                             speechTextToEmit = userMsgText
@@ -194,7 +215,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                                 UiMessage(
                                     sender = MessageSender.ASSISTANT,
                                     text = promptMsg,
-                                    actionTool = outcome.action.name
+                                    actionTool = outcome.action.name,
+                                    requestId = outcome.requestId ?: request.requestId,
+                                    timingSummary = timingSummary
                                 )
                             )
                             speechTextToEmit = promptMsg
@@ -204,11 +227,19 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                                 UiMessage(
                                     sender = MessageSender.SYSTEM,
                                     text = outcome.reason,
-                                    isError = true
+                                    isError = true,
+                                    requestId = outcome.requestId ?: request.requestId,
+                                    timingSummary = timingSummary
                                 )
                             )
                         }
                     }
+                }
+
+                val statusLabelText = if (request.timings.isFastPath) {
+                    "Completed ($timingSummary) • 38 Tools Ready"
+                } else {
+                    "Completed (${durationMs}ms) • 38 Tools Ready"
                 }
 
                 _uiState.update { current ->
@@ -217,7 +248,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         messages = combined,
                         isBusy = false,
                         statusState = AssistantStatusState.MODEL_READY,
-                        statusLabel = "Completed (${durationMs}ms) • 38 Tools Ready",
+                        statusLabel = statusLabelText,
                         lastExecutionDurationMs = durationMs,
                         budgetInfo = engineManager.getBudgetStatus()
                     )
@@ -241,7 +272,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         sender = MessageSender.SYSTEM,
                         text = errMsg,
                         isError = true,
-                        executionDurationMs = durationMs
+                        executionDurationMs = durationMs,
+                        requestId = request.requestId
                     )
                     current.copy(
                         messages = (current.messages + errorMsg).takeLast(maxVisibleMessages),
