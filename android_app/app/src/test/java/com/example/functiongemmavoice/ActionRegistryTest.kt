@@ -254,4 +254,23 @@ class ActionRegistryTest {
         val parsedWithNumbers = registry.parseArgs("{duration_seconds:300}")
         assertEquals(300, parsedWithNumbers.optInt("duration_seconds"))
     }
+
+    @Test
+    fun testBluetoothPairingToolValidation() {
+        val registry = ActionRegistry(MockContext())
+        val action = registry.prepare("open_bluetooth_pairing", JSONObject())
+        assertNotNull(action)
+        assertEquals("open_bluetooth_pairing", action?.name)
+        assertFalse(action!!.requiresConfirmation)
+    }
+
+    @Test
+    fun testTokenEstimationMultilingual() {
+        val manager = com.example.functiongemmavoice.runtime.InferenceEngineManager.getInstance(MockContext())
+        val englishTokens = manager.estimateTokens("Turn on the flashlight")
+        assertTrue(englishTokens in 4..12)
+
+        val teluguTokens = manager.estimateTokens("నా ఫోన్ బ్యాటరీ ఎంత?")
+        assertTrue(teluguTokens in 5..20)
+    }
 }
