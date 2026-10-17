@@ -2,6 +2,7 @@ package com.example.functiongemmavoice.runtime.orchestrator
 
 import com.example.functiongemmavoice.runtime.ActionRegistry
 import com.example.functiongemmavoice.runtime.ActionResult
+import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Semaphore
@@ -11,7 +12,8 @@ import kotlinx.coroutines.withContext
 class TaskPlanScheduler(
     private val actionRegistry: ActionRegistry,
     private val validator: PlanValidator,
-    private val maxConcurrency: Int = 2
+    private val maxConcurrency: Int = 2,
+    private val customActionExecutor: (suspend (String, JSONObject) -> ActionResult)? = null
 ) {
 
     private val semaphore = Semaphore(maxConcurrency)
@@ -35,6 +37,14 @@ class TaskPlanScheduler(
         val remainingSteps = plan.steps.toMutableList()
 
         while (remainingSteps.any { !it.isTerminal }) {
+            if (plan.overallStatus == PlanStatus.CANCELLED) {
+                for (rem in remainingSteps.filter { !it.isTerminal }) {
+                    rem.status = StepStatus.CANCELLED
+                    rem.errorCode = "ACTION_CANCELLED"
+                    onStepProgress?.invoke(rem)
+                }
+                return@withContext PlanStatus.CANCELLED
+            }
             // Find steps whose dependencies are all satisfied with SUCCESS
             val readySteps = remainingSteps.filter { step ->
                 step.status == StepStatus.PENDING && step.dependsOn.all { depId ->
@@ -100,7 +110,8 @@ class TaskPlanScheduler(
                 semaphore.withPermit {
                     val cap = actionRegistry.capabilityRegistry.get(step.actionId)
                     val canonicalName = cap?.canonicalId ?: step.actionId
-                    val result = actionRegistry.execute(canonicalName, step.validatedArguments)
+                    val result = customActionExecutor?.invoke(canonicalName, step.validatedArguments)
+                        ?: actionRegistry.execute(canonicalName, step.validatedArguments)
                     step.executionResult = result
 
                     when (result) {
@@ -133,6 +144,16 @@ class TaskPlanScheduler(
                 } else {
                     step.status = StepStatus.FAILED
                 }
+            }
+        }
+    }
+
+    fun cancelPlan(plan: TaskPlan) {
+        plan.overallStatus = PlanStatus.CANCELLED
+        for (step in plan.steps) {
+            if (!step.isTerminal) {
+                step.status = StepStatus.CANCELLED
+                step.errorCode = "ACTION_CANCELLED"
             }
         }
     }

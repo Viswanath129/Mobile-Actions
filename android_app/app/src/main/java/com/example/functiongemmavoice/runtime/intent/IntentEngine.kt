@@ -259,6 +259,26 @@ class IntentEngine(private val capabilityRegistry: CapabilityRegistry) {
             return resolveFlashlightIntent(norm, rawOriginal, reqId)
         }
 
+        // 4C1. BRIGHTNESS
+        if (isBrightnessRelated(norm)) {
+            return resolveBrightnessIntent(norm, rawOriginal, reqId)
+        }
+
+        // 4C2. DND (Do Not Disturb)
+        if (isDndRelated(norm)) {
+            return resolveDndIntent(norm, rawOriginal, reqId)
+        }
+
+        // 4C3. RINGER MODE (Silent / Vibrate / Normal)
+        if (isRingerRelated(norm)) {
+            return resolveRingerIntent(norm, rawOriginal, reqId)
+        }
+
+        // 4C4. VOLUME
+        if (isVolumeRelated(norm)) {
+            return resolveVolumeIntent(norm, rawOriginal, reqId)
+        }
+
         // 4D. BATTERY STATUS
         if (isBatteryRelated(norm)) {
             return StructuredIntent(
@@ -371,6 +391,216 @@ class IntentEngine(private val capabilityRegistry: CapabilityRegistry) {
                 confidence = 1.0f,
                 executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
                 canonicalToolName = "open_calendar"
+            )
+        }
+
+        // 4IA. LOCK SCREEN
+        if (norm.contains("lock screen") || norm.contains("lock my screen") ||
+            norm.contains("lock phone") || norm.contains("lock my phone") ||
+            norm.contains("స్క్రీన్ లాక్") || norm.contains("ఫోన్ లాక్") || norm == "lock") {
+            return StructuredIntent(
+                requestId = reqId,
+                originalUtterance = rawOriginal,
+                normalizedUtterance = norm,
+                intentDomain = IntentDomain.STATE_MUTATION,
+                action = SemanticAction.SET_STATE,
+                target = "lock_screen",
+                desiredState = DesiredState.ON,
+                confidence = 1.0f,
+                executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+                canonicalToolName = "lock_screen",
+                canonicalIntentId = CanonicalIntentId.LOCK_SCREEN
+            )
+        }
+
+        // 4IB. NAVIGATION & APP CLOSING
+        if (norm == "back" || norm == "go back" || norm == "navigate back" || norm == "వెనక్కి" || norm == "వెనక్కి వెళ్ళు") {
+            return StructuredIntent(
+                requestId = reqId,
+                originalUtterance = rawOriginal,
+                normalizedUtterance = norm,
+                intentDomain = IntentDomain.SYSTEM_INSPECTION,
+                action = SemanticAction.OPEN_SETTINGS,
+                target = "navigate_back",
+                confidence = 1.0f,
+                executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+                canonicalToolName = "navigate_back",
+                canonicalIntentId = CanonicalIntentId.NAVIGATE_BACK
+            )
+        }
+        if (norm == "home" || norm == "go home" || norm == "home screen" || norm == "హోమ్" || norm == "హోమ్ కి వెళ్ళు") {
+            return StructuredIntent(
+                requestId = reqId,
+                originalUtterance = rawOriginal,
+                normalizedUtterance = norm,
+                intentDomain = IntentDomain.SYSTEM_INSPECTION,
+                action = SemanticAction.OPEN_SETTINGS,
+                target = "go_home_screen",
+                confidence = 1.0f,
+                executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+                canonicalToolName = "go_home_screen",
+                canonicalIntentId = CanonicalIntentId.GO_HOME
+            )
+        }
+        if (norm == "recents" || norm == "show recents" || norm == "recent apps" || norm == "రీసెంట్స్") {
+            return StructuredIntent(
+                requestId = reqId,
+                originalUtterance = rawOriginal,
+                normalizedUtterance = norm,
+                intentDomain = IntentDomain.SYSTEM_INSPECTION,
+                action = SemanticAction.OPEN_SETTINGS,
+                target = "show_recents",
+                confidence = 1.0f,
+                executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+                canonicalToolName = "show_recents",
+                canonicalIntentId = CanonicalIntentId.SHOW_RECENTS
+            )
+        }
+        if (norm.startsWith("close ") || norm.startsWith("exit ") || norm.startsWith("kill ") || norm.endsWith(" క్లోజ్ చెయ్") || norm == "close app") {
+            val app = norm.removePrefix("close ").removePrefix("exit ").removePrefix("kill ").removeSuffix(" క్లోజ్ చెయ్").removeSuffix(" app").trim()
+            val resolvedApp = if (app.isNotBlank()) (appAliases[app] ?: app.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }) else "the application"
+            return StructuredIntent(
+                requestId = reqId,
+                originalUtterance = rawOriginal,
+                normalizedUtterance = norm,
+                intentDomain = IntentDomain.APP_LAUNCH,
+                action = SemanticAction.LAUNCH_APP,
+                target = "close_app",
+                parameters = mapOf("app_name" to resolvedApp),
+                confidence = 0.95f,
+                executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+                canonicalToolName = "close_or_minimize_app",
+                canonicalIntentId = CanonicalIntentId.GO_HOME
+            )
+        }
+
+        // 4IC. PLAY STORE ACTIONS
+        if (norm.contains("play store") || norm.contains("ప్లే స్టోర్") || norm.startsWith("install ") ||
+            (norm.startsWith("update ") && !norm.contains("bluetooth") && !norm.contains("wifi"))) {
+            if (norm.contains("update all") || norm.contains("show updates") || norm.contains("show my updates") || norm.contains("app updates") || norm == "open play store updates" || norm.contains("అప్‌డేట్లు")) {
+                return StructuredIntent(
+                    requestId = reqId,
+                    originalUtterance = rawOriginal,
+                    normalizedUtterance = norm,
+                    intentDomain = IntentDomain.APP_LAUNCH,
+                    action = SemanticAction.LAUNCH_APP,
+                    target = "play_store_updates",
+                    confidence = 1.0f,
+                    executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+                    canonicalToolName = "open_play_store_updates",
+                    canonicalIntentId = CanonicalIntentId.OPEN_PLAY_STORE_UPDATES
+                )
+            }
+            if (norm.startsWith("install ")) {
+                val app = norm.removePrefix("install ").removeSuffix(" app").trim()
+                val resolved = appAliases[app] ?: app.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
+                return StructuredIntent(
+                    requestId = reqId,
+                    originalUtterance = rawOriginal,
+                    normalizedUtterance = norm,
+                    intentDomain = IntentDomain.APP_LAUNCH,
+                    action = SemanticAction.LAUNCH_APP,
+                    target = resolved,
+                    parameters = mapOf("app_name" to resolved),
+                    confidence = 0.95f,
+                    executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+                    canonicalToolName = "request_app_install",
+                    canonicalIntentId = CanonicalIntentId.REQUEST_APP_INSTALL
+                )
+            }
+            if (norm.startsWith("update ") && !norm.contains("all")) {
+                val app = norm.removePrefix("update ").removeSuffix(" app").trim()
+                val resolved = appAliases[app] ?: app.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
+                return StructuredIntent(
+                    requestId = reqId,
+                    originalUtterance = rawOriginal,
+                    normalizedUtterance = norm,
+                    intentDomain = IntentDomain.APP_LAUNCH,
+                    action = SemanticAction.LAUNCH_APP,
+                    target = resolved,
+                    parameters = mapOf("app_name" to resolved),
+                    confidence = 0.95f,
+                    executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+                    canonicalToolName = "request_app_update",
+                    canonicalIntentId = CanonicalIntentId.REQUEST_APP_UPDATE
+                )
+            }
+            if (norm.startsWith("search play store") || norm.startsWith("find in play store") || norm.contains("in play store") || norm.contains("on play store") || norm.contains("ప్లే స్టోర్ లో")) {
+                val q = norm.replace("search play store for", "")
+                    .replace("find in play store", "")
+                    .replace("search in play store", "")
+                    .replace("in play store", "")
+                    .replace("on play store", "")
+                    .replace("open play store search", "")
+                    .replace("ప్లే స్టోర్ లో", "").trim()
+                val finalQ = if (q.isNotBlank()) q else "top apps"
+                return StructuredIntent(
+                    requestId = reqId,
+                    originalUtterance = rawOriginal,
+                    normalizedUtterance = norm,
+                    intentDomain = IntentDomain.APP_LAUNCH,
+                    action = SemanticAction.LAUNCH_APP,
+                    target = finalQ,
+                    parameters = mapOf("query" to finalQ),
+                    confidence = 0.95f,
+                    executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+                    canonicalToolName = "open_play_store_search",
+                    canonicalIntentId = CanonicalIntentId.OPEN_PLAY_STORE_SEARCH
+                )
+            }
+            if (norm.startsWith("open ") && (norm.contains("in play store") || norm.contains("on play store"))) {
+                val app = norm.replace("open ", "").replace("in play store", "").replace("on play store", "").removeSuffix(" app").trim()
+                val resolved = appAliases[app] ?: app.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
+                return StructuredIntent(
+                    requestId = reqId,
+                    originalUtterance = rawOriginal,
+                    normalizedUtterance = norm,
+                    intentDomain = IntentDomain.APP_LAUNCH,
+                    action = SemanticAction.LAUNCH_APP,
+                    target = resolved,
+                    parameters = mapOf("app_name" to resolved),
+                    confidence = 0.95f,
+                    executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+                    canonicalToolName = "open_play_store_listing",
+                    canonicalIntentId = CanonicalIntentId.OPEN_PLAY_STORE_LISTING
+                )
+            }
+        }
+
+        // 4ID. MULTI-WINDOW & SPLIT SCREEN
+        if (norm.contains("split screen") || norm.contains("side by side") || (norm.contains(" next to ") && (norm.startsWith("open ") || norm.startsWith("show ")))) {
+            val apps = extractSplitScreenApps(norm)
+            return StructuredIntent(
+                requestId = reqId,
+                originalUtterance = rawOriginal,
+                normalizedUtterance = norm,
+                intentDomain = IntentDomain.APP_LAUNCH,
+                action = SemanticAction.LAUNCH_APP,
+                target = "split_screen",
+                parameters = mapOf("primary_app" to apps.first, "secondary_app" to apps.second),
+                confidence = 0.95f,
+                executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+                canonicalToolName = "open_split_screen",
+                canonicalIntentId = CanonicalIntentId.OPEN_SPLIT_SCREEN
+            )
+        }
+
+        // 4IE. FLOATING WINDOW
+        if (norm.contains("floating window") || norm.contains("floating mode")) {
+            val app = norm.replace("open ", "").replace("in floating window", "").replace("floating window", "").replace("floating mode", "").trim()
+            val finalApp = if (app.isNotBlank()) (appAliases[app] ?: app.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }) else "App"
+            return StructuredIntent(
+                requestId = reqId,
+                originalUtterance = rawOriginal,
+                normalizedUtterance = norm,
+                intentDomain = IntentDomain.APP_LAUNCH,
+                action = SemanticAction.LAUNCH_APP,
+                target = finalApp,
+                parameters = mapOf("app_name" to finalApp),
+                confidence = 0.95f,
+                executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+                canonicalToolName = "open_floating_window",
+                canonicalIntentId = CanonicalIntentId.OPEN_FLOATING_WINDOW
             )
         }
 
@@ -552,6 +782,246 @@ class IntentEngine(private val capabilityRegistry: CapabilityRegistry) {
         )
     }
 
+    // --- BRIGHTNESS INTENT DISAMBIGUATION ---
+    private fun resolveBrightnessIntent(norm: String, rawOriginal: String, reqId: String): StructuredIntent {
+        if (norm.startsWith("is brightness") || norm.contains("what is") || norm.contains("check") || norm.contains("get") || norm.contains("ఎంత") || norm == "brightness") {
+            return StructuredIntent(
+                requestId = reqId,
+                originalUtterance = rawOriginal,
+                normalizedUtterance = norm,
+                intentDomain = IntentDomain.SYSTEM_INSPECTION,
+                action = SemanticAction.GET_STATE,
+                target = "brightness",
+                desiredState = DesiredState.OBSERVE,
+                confidence = 1.0f,
+                executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+                canonicalToolName = "get_brightness",
+                canonicalIntentId = CanonicalIntentId.GET_BRIGHTNESS
+            )
+        }
+        if (norm.contains("dim") || norm.contains("minimum") || norm.contains("min") || norm.contains("low")) {
+            return StructuredIntent(
+                requestId = reqId,
+                originalUtterance = rawOriginal,
+                normalizedUtterance = norm,
+                intentDomain = IntentDomain.STATE_MUTATION,
+                action = SemanticAction.SET_STATE,
+                target = "brightness",
+                desiredState = DesiredState.ON,
+                parameters = mapOf("percentage" to 15),
+                confidence = 1.0f,
+                executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+                canonicalToolName = "set_brightness",
+                canonicalIntentId = CanonicalIntentId.SET_BRIGHTNESS
+            )
+        }
+        if (norm.contains("max") || norm.contains("100")) {
+            return StructuredIntent(
+                requestId = reqId,
+                originalUtterance = rawOriginal,
+                normalizedUtterance = norm,
+                intentDomain = IntentDomain.STATE_MUTATION,
+                action = SemanticAction.SET_STATE,
+                target = "brightness",
+                desiredState = DesiredState.ON,
+                parameters = mapOf("percentage" to 100),
+                confidence = 1.0f,
+                executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+                canonicalToolName = "set_brightness",
+                canonicalIntentId = CanonicalIntentId.SET_BRIGHTNESS
+            )
+        }
+        val pctMatch = Regex("""(\d{1,3})\s*%?""").find(norm)
+        if (pctMatch != null) {
+            val pct = pctMatch.groupValues[1].toIntOrNull()?.coerceIn(0, 100) ?: 50
+            return StructuredIntent(
+                requestId = reqId,
+                originalUtterance = rawOriginal,
+                normalizedUtterance = norm,
+                intentDomain = IntentDomain.STATE_MUTATION,
+                action = SemanticAction.SET_STATE,
+                target = "brightness",
+                desiredState = DesiredState.ON,
+                parameters = mapOf("percentage" to pct),
+                confidence = 1.0f,
+                executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+                canonicalToolName = "set_brightness",
+                canonicalIntentId = CanonicalIntentId.SET_BRIGHTNESS
+            )
+        }
+        val isLower = norm.contains("down") || norm.contains("lower") || norm.contains("decrease") || norm.contains("reduce") || norm.contains("తగ్గించు")
+        val dir = if (isLower) "down" else "up"
+        val delta = if (isLower) -20 else 20
+        return StructuredIntent(
+            requestId = reqId,
+            originalUtterance = rawOriginal,
+            normalizedUtterance = norm,
+            intentDomain = IntentDomain.STATE_MUTATION,
+            action = SemanticAction.SET_STATE,
+            target = "brightness",
+            desiredState = DesiredState.ON,
+            parameters = mapOf("direction" to dir, "delta" to delta),
+            confidence = 1.0f,
+            executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+            canonicalToolName = "adjust_brightness",
+            canonicalIntentId = CanonicalIntentId.ADJUST_BRIGHTNESS
+        )
+    }
+
+    // --- DND INTENT DISAMBIGUATION ---
+    private fun resolveDndIntent(norm: String, rawOriginal: String, reqId: String): StructuredIntent {
+        val isOff = norm.contains("off") || norm.contains("disable") || norm.contains("stop") || norm.contains("ఆఫ్")
+        return StructuredIntent(
+            requestId = reqId,
+            originalUtterance = rawOriginal,
+            normalizedUtterance = norm,
+            intentDomain = IntentDomain.STATE_MUTATION,
+            action = SemanticAction.SET_STATE,
+            target = "dnd",
+            desiredState = if (isOff) DesiredState.OFF else DesiredState.ON,
+            parameters = mapOf("enabled" to !isOff),
+            confidence = 1.0f,
+            executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+            canonicalToolName = "set_dnd_mode",
+            canonicalIntentId = CanonicalIntentId.SET_DND_MODE
+        )
+    }
+
+    // --- RINGER INTENT DISAMBIGUATION ---
+    private fun resolveRingerIntent(norm: String, rawOriginal: String, reqId: String): StructuredIntent {
+        val mode = when {
+            norm.contains("silent") || norm.contains("mute phone") || norm.contains("సైలెంట్") -> "silent"
+            norm.contains("vibrate") || norm.contains("vibration") || norm.contains("వైబ్రేట్") -> "vibrate"
+            else -> "normal"
+        }
+        return StructuredIntent(
+            requestId = reqId,
+            originalUtterance = rawOriginal,
+            normalizedUtterance = norm,
+            intentDomain = IntentDomain.STATE_MUTATION,
+            action = SemanticAction.SET_STATE,
+            target = "ringer",
+            desiredState = DesiredState.ON,
+            parameters = mapOf("mode" to mode),
+            confidence = 1.0f,
+            executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+            canonicalToolName = "set_ringer_mode",
+            canonicalIntentId = CanonicalIntentId.SET_RINGER_MODE
+        )
+    }
+
+    // --- VOLUME INTENT DISAMBIGUATION ---
+    private fun resolveVolumeIntent(norm: String, rawOriginal: String, reqId: String): StructuredIntent {
+        val stream = when {
+            norm.contains("media") || norm.contains("music") -> "media"
+            norm.contains("ring") || norm.contains("call") -> "ring"
+            norm.contains("notification") -> "notification"
+            norm.contains("alarm") -> "alarm"
+            else -> "media"
+        }
+        if (norm.contains("unmute")) {
+            return StructuredIntent(
+                requestId = reqId,
+                originalUtterance = rawOriginal,
+                normalizedUtterance = norm,
+                intentDomain = IntentDomain.STATE_MUTATION,
+                action = SemanticAction.SET_STATE,
+                target = "volume",
+                parameters = mapOf("stream" to stream),
+                confidence = 1.0f,
+                executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+                canonicalToolName = "unmute_stream",
+                canonicalIntentId = CanonicalIntentId.UNMUTE_STREAM
+            )
+        }
+        if (norm.contains("mute")) {
+            return StructuredIntent(
+                requestId = reqId,
+                originalUtterance = rawOriginal,
+                normalizedUtterance = norm,
+                intentDomain = IntentDomain.STATE_MUTATION,
+                action = SemanticAction.SET_STATE,
+                target = "volume",
+                parameters = mapOf("stream" to stream),
+                confidence = 1.0f,
+                executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+                canonicalToolName = "mute_stream",
+                canonicalIntentId = CanonicalIntentId.MUTE_STREAM
+            )
+        }
+        if (norm.contains("what is") || norm.contains("check") || norm.contains("get") || norm.contains("status") || norm.contains("level") || norm.contains("ఎంత") || norm == "volume") {
+            return StructuredIntent(
+                requestId = reqId,
+                originalUtterance = rawOriginal,
+                normalizedUtterance = norm,
+                intentDomain = IntentDomain.SYSTEM_INSPECTION,
+                action = SemanticAction.GET_STATE,
+                target = "volume",
+                parameters = mapOf("stream" to stream),
+                confidence = 1.0f,
+                executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+                canonicalToolName = "get_volume",
+                canonicalIntentId = CanonicalIntentId.GET_VOLUME
+            )
+        }
+        val pctMatch = Regex("""(\d{1,3})\s*%?""").find(norm)
+        if (pctMatch != null) {
+            val pct = pctMatch.groupValues[1].toIntOrNull()?.coerceIn(0, 100) ?: 50
+            return StructuredIntent(
+                requestId = reqId,
+                originalUtterance = rawOriginal,
+                normalizedUtterance = norm,
+                intentDomain = IntentDomain.STATE_MUTATION,
+                action = SemanticAction.SET_STATE,
+                target = "volume",
+                parameters = mapOf("stream" to stream, "percentage" to pct),
+                confidence = 1.0f,
+                executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+                canonicalToolName = "set_volume",
+                canonicalIntentId = CanonicalIntentId.SET_VOLUME
+            )
+        }
+        val isLower = norm.contains("down") || norm.contains("lower") || norm.contains("decrease") || norm.contains("reduce") || norm.contains("quieter") || norm.contains("తగ్గించు")
+        val dir = if (isLower) "down" else "up"
+        val delta = if (isLower) -1 else 1
+        return StructuredIntent(
+            requestId = reqId,
+            originalUtterance = rawOriginal,
+            normalizedUtterance = norm,
+            intentDomain = IntentDomain.STATE_MUTATION,
+            action = SemanticAction.SET_STATE,
+            target = "volume",
+            parameters = mapOf("stream" to stream, "direction" to dir, "delta" to delta),
+            confidence = 1.0f,
+            executionStrategy = ExecutionStrategy.FAST_PATH_DETERMINISTIC,
+            canonicalToolName = "adjust_volume",
+            canonicalIntentId = CanonicalIntentId.ADJUST_VOLUME
+        )
+    }
+
+    private fun isBrightnessRelated(s: String): Boolean {
+        if (s.contains("settings")) return false
+        return s.contains("brightness") || s.contains("screen light") || s.contains("dim screen") ||
+               s.contains("make screen brighter") || s.contains("బ్రైట్‌నెస్") || s.contains("బ్రైట్నెస్")
+    }
+
+    private fun isDndRelated(s: String): Boolean {
+        if (s.contains("settings")) return false
+        return s.contains("dnd") || s.contains("do not disturb")
+    }
+
+    private fun isRingerRelated(s: String): Boolean {
+        return s.contains("silent mode") || s.contains("vibrate mode") || s.contains("vibration mode") ||
+               s.contains("normal mode") || s == "silent" || s == "vibrate" || s.contains("put phone on vibrate") ||
+               s.contains("put phone on silent") || s.contains("mute phone") || s.contains("సైలెంట్") || s.contains("వైబ్రేట్")
+    }
+
+    private fun isVolumeRelated(s: String): Boolean {
+        if (s.contains("settings")) return false
+        return s.contains("volume") || s.contains("mute") || s.contains("unmute") ||
+               s.contains("sound level") || s.contains("వాల్యూమ్")
+    }
+
     private fun isBluetoothRelated(s: String): Boolean {
         return s.contains("bluetooth") || s.contains("బ్లూటూత్") || s.contains("blutooth")
     }
@@ -729,6 +1199,19 @@ class IntentEngine(private val capabilityRegistry: CapabilityRegistry) {
             s.contains("mobile data settings") -> "open_mobile_data_settings"
             s.contains("nfc settings") -> "open_nfc_settings"
             s.contains("accessibility settings") -> "open_accessibility_settings"
+            s.contains("wallpaper") -> "open_wallpaper_settings"
+            s.contains("font") -> "open_font_settings"
+            s.contains("screen timeout") -> "open_screen_timeout_settings"
+            s.contains("battery settings") || s.contains("power usage") || s == "open battery" -> "open_battery_settings"
+            s.contains("app permissions") || s.contains("permission settings") -> "open_app_permissions_settings"
+            s.contains("app notifications") || s.contains("notification settings") -> "open_app_notification_settings"
+            s.contains("app details") || s.contains("app info") -> "open_app_details_settings"
+            s.contains("hotspot") || s.contains("tethering") -> "open_hotspot_settings"
+            s.contains("network settings") -> "open_network_settings"
+            s.contains("vpn") -> "open_vpn_settings"
+            s.contains("language settings") || s.contains("locale") -> "open_language_settings"
+            s.contains("privacy settings") -> "open_privacy_settings"
+            s.contains("wifi panel") || s.contains("internet panel") || s.contains("connectivity panel") -> "open_wifi_panel"
             else -> null
         }
     }
@@ -766,5 +1249,30 @@ class IntentEngine(private val capabilityRegistry: CapabilityRegistry) {
             )
         }
         return null
+    }
+
+    private fun extractSplitScreenApps(s: String): Pair<String, String> {
+        val clean = s.replace("in split screen", "")
+            .replace("split screen", "")
+            .replace("side by side", "")
+            .replace("open ", "")
+            .replace("show ", "")
+            .replace("launch ", "")
+            .trim()
+        val parts = when {
+            clean.contains(" and ") -> clean.split(" and ")
+            clean.contains(" next to ") -> clean.split(" next to ")
+            clean.contains(" with ") -> clean.split(" with ")
+            clean.contains(" మరియు ") -> clean.split(" మరియు ")
+            else -> emptyList()
+        }
+        if (parts.size >= 2) {
+            val p1 = parts[0].trim()
+            val p2 = parts[1].trim()
+            val app1 = appAliases[p1] ?: p1.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
+            val app2 = appAliases[p2] ?: p2.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
+            return Pair(app1, app2)
+        }
+        return Pair("WhatsApp", "YouTube")
     }
 }

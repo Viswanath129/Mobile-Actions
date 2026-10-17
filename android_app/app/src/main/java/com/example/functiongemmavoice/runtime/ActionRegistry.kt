@@ -27,6 +27,34 @@ import android.os.Build
 import com.example.functiongemmavoice.runtime.capability.CapabilityRegistry
 import java.io.InputStreamReader
 
+import com.example.functiongemmavoice.runtime.accessibility.AssistantAccessibilityService
+import android.content.ActivityNotFoundException
+import android.media.AudioManager
+import android.app.NotificationManager
+import kotlin.math.roundToInt
+
+enum class AssistantFailureCategory {
+    NONE,
+    AMBIGUOUS_INTENT,
+    UNKNOWN_APPLICATION,
+    APP_NOT_INSTALLED,
+    ACTIVITY_NOT_FOUND,
+    PERMISSION_DENIED,
+    ACCESSIBILITY_NOT_ENABLED,
+    DEVICE_ADMIN_UNAVAILABLE,
+    SYSTEM_ACTION_UNSUPPORTED,
+    PLAY_STORE_UNAVAILABLE,
+    USER_CONFIRMATION_REQUIRED,
+    MULTI_WINDOW_UNAVAILABLE,
+    FLOATING_WINDOW_UNSUPPORTED,
+    ACTION_TIMEOUT,
+    TOOL_EXECUTION_FAILED,
+    RESULT_NOT_VERIFIED,
+    PARTIAL_SUCCESS,
+    CANCELLED,
+    INTERNAL_ERROR
+}
+
 data class PreparedAction(
     val name: String,
     val args: JSONObject,
@@ -34,23 +62,35 @@ data class PreparedAction(
     val requiresConfirmation: Boolean
 )
 
-sealed class ActionResult {
-    data class Success(val tool: String, val message: String) : ActionResult()
-    data class NeedsConfirmation(val action: PreparedAction) : ActionResult()
-    data class InvalidArguments(val tool: String, val reason: String) : ActionResult()
-    data class PermissionDenied(val tool: String, val permission: String) : ActionResult()
-    data class UnsupportedAction(val tool: String) : ActionResult()
-    data class ExecutionFailed(val tool: String, val error: String) : ActionResult()
-    data class Cancelled(val tool: String) : ActionResult()
+sealed class ActionResult(open val failureCategory: AssistantFailureCategory = AssistantFailureCategory.NONE) {
+    data class Success(val tool: String, val message: String) : ActionResult(AssistantFailureCategory.NONE)
+    data class NeedsConfirmation(val action: PreparedAction) : ActionResult(AssistantFailureCategory.USER_CONFIRMATION_REQUIRED)
+    data class InvalidArguments(val tool: String, val reason: String) : ActionResult(AssistantFailureCategory.TOOL_EXECUTION_FAILED)
+    data class PermissionDenied(val tool: String, val permission: String) : ActionResult(AssistantFailureCategory.PERMISSION_DENIED)
+    data class AccessibilityNotEnabled(val tool: String, val message: String = "Accessibility Service is not enabled. Please enable it in Settings > Accessibility to perform this action.") : ActionResult(AssistantFailureCategory.ACCESSIBILITY_NOT_ENABLED)
+    data class AppNotFound(val appName: String, val reason: String = "App “$appName” is not installed or cannot be launched.", override val failureCategory: AssistantFailureCategory = AssistantFailureCategory.APP_NOT_INSTALLED) : ActionResult(failureCategory)
+    data class PlayStoreUnavailable(val reason: String) : ActionResult(AssistantFailureCategory.PLAY_STORE_UNAVAILABLE)
+    data class MultiWindowUnavailable(val reason: String) : ActionResult(AssistantFailureCategory.MULTI_WINDOW_UNAVAILABLE)
+    data class FloatingWindowUnsupported(val reason: String = "Floating window mode is not supported via standard Android public APIs.") : ActionResult(AssistantFailureCategory.FLOATING_WINDOW_UNSUPPORTED)
+    data class UnsupportedAction(val tool: String, val reason: String = "Action '$tool' is not supported.", override val failureCategory: AssistantFailureCategory = AssistantFailureCategory.SYSTEM_ACTION_UNSUPPORTED) : ActionResult(failureCategory)
+    data class ExecutionFailed(val tool: String, val error: String, override val failureCategory: AssistantFailureCategory = AssistantFailureCategory.TOOL_EXECUTION_FAILED) : ActionResult(failureCategory)
+    data class Cancelled(val tool: String) : ActionResult(AssistantFailureCategory.CANCELLED)
+    data class PartialSuccess(val summary: String, val stepResults: Map<String, ActionResult> = emptyMap()) : ActionResult(AssistantFailureCategory.PARTIAL_SUCCESS)
 
     fun userFacingMessage(): String = when (this) {
         is Success -> message
         is NeedsConfirmation -> "Action '${action.name}' requires confirmation."
         is InvalidArguments -> "Invalid arguments for $tool: $reason"
         is PermissionDenied -> "Permission required: $permission"
-        is UnsupportedAction -> "Action '$tool' is not supported."
+        is AccessibilityNotEnabled -> message
+        is AppNotFound -> reason
+        is PlayStoreUnavailable -> "Google Play Store unavailable: $reason"
+        is MultiWindowUnavailable -> reason
+        is FloatingWindowUnsupported -> reason
+        is UnsupportedAction -> reason
         is ExecutionFailed -> "Failed to execute $tool: $error"
         is Cancelled -> "Action '$tool' was cancelled."
+        is PartialSuccess -> summary
     }
 }
 
@@ -62,6 +102,12 @@ class ActionRegistry(val context: Context) {
     private val emailRegex = Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\$")
     private val cameraManager by lazy {
         context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
+    }
+    private val audioManager by lazy {
+        context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+    }
+    private val notificationManager by lazy {
+        context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
     }
 
     init {
@@ -187,7 +233,72 @@ class ActionRegistry(val context: Context) {
             "open_date_time_settings", "open_developer_options", "open_airplane_mode_settings",
             "open_mobile_data_settings", "open_nfc_settings", "open_accessibility_settings",
             "open_sound_settings", "open_volume_settings", "open_display_settings",
-            "open_location_settings", "open_dnd_settings", "open_calendar" -> {
+            "open_location_settings", "open_dnd_settings", "open_calendar",
+            "open_wallpaper_settings", "open_font_settings", "open_screen_timeout_settings",
+            "open_battery_settings", "open_app_permissions_settings", "open_hotspot_settings",
+            "open_network_settings", "open_vpn_settings", "open_language_settings",
+            "open_privacy_settings", "open_wifi_panel" -> {
+                sensitive = false
+            }
+
+            // Display & Brightness Controls
+            "get_brightness" -> {
+                sensitive = false
+            }
+            "set_brightness" -> {
+                val pct = args.optInt("percentage", -1).let { if (it == -1) args.optInt("level", -1) else it }
+                if (pct !in 0..100) return null
+                clean.put("percentage", pct)
+                sensitive = false
+            }
+            "adjust_brightness" -> {
+                val delta = args.optInt("delta_percent", 0).let { if (it == 0) args.optInt("delta", 0) else it }
+                clean.put("delta_percent", delta)
+                sensitive = false
+            }
+
+            // Audio & Volume Controls
+            "get_volume" -> {
+                val stream = args.optString("stream").ifBlank { "media" }.lowercase()
+                clean.put("stream", stream)
+                sensitive = false
+            }
+            "set_volume" -> {
+                val stream = args.optString("stream").ifBlank { "media" }.lowercase()
+                val pct = args.optInt("percentage", -1).let { if (it == -1) args.optInt("level", -1) else it }
+                if (pct !in 0..100) return null
+                clean.put("stream", stream)
+                clean.put("percentage", pct)
+                sensitive = false
+            }
+            "adjust_volume" -> {
+                val stream = args.optString("stream").ifBlank { "media" }.lowercase()
+                val delta = args.optInt("delta_percent", 0)
+                clean.put("stream", stream)
+                clean.put("delta_percent", delta)
+                sensitive = false
+            }
+            "mute_stream", "unmute_stream" -> {
+                val stream = args.optString("stream").ifBlank { "media" }.lowercase()
+                clean.put("stream", stream)
+                sensitive = false
+            }
+            "set_ringer_mode" -> {
+                val mode = args.optString("mode").lowercase()
+                if (mode !in listOf("silent", "vibrate", "normal")) return null
+                clean.put("mode", mode)
+                sensitive = false
+            }
+            "set_dnd_mode" -> {
+                val enabled = args.optBoolean("enabled", true)
+                clean.put("enabled", enabled)
+                if (args.has("duration_minutes")) clean.put("duration_minutes", args.getInt("duration_minutes"))
+                sensitive = false
+            }
+            "open_app_notification_settings", "open_app_details_settings" -> {
+                val pkg = args.optString("package_name").ifBlank { args.optString("app_name") }.trim()
+                if (pkg.isBlank()) return null
+                clean.put("package_name", pkg)
                 sensitive = false
             }
 
@@ -242,7 +353,51 @@ class ActionRegistry(val context: Context) {
                 clean.put("app_name", app)
                 sensitive = false
             }
-            "go_home_screen" -> {
+            "go_home_screen", "lock_screen", "navigate_back", "show_recents" -> {
+                sensitive = false
+            }
+            "close_or_minimize_app" -> {
+                val app = args.optString("app_name").trim()
+                if (app.isNotBlank()) clean.put("app_name", app)
+                sensitive = false
+            }
+            "open_play_store_search" -> {
+                val q = args.optString("query").ifBlank { args.optString("app_name") }.trim()
+                if (q.isBlank()) return null
+                clean.put("query", q)
+                sensitive = false
+            }
+            "open_play_store_listing" -> {
+                val app = args.optString("app_name").ifBlank { args.optString("package_name") }.trim()
+                if (app.isBlank()) return null
+                clean.put("app_name", app)
+                if (args.has("package_name")) clean.put("package_name", args.getString("package_name"))
+                sensitive = false
+            }
+            "open_play_store_updates" -> {
+                sensitive = false
+            }
+            "request_app_install" -> {
+                val app = args.optString("app_name").trim()
+                if (app.isBlank()) return null
+                clean.put("app_name", app)
+                sensitive = false
+            }
+            "request_app_update" -> {
+                val app = args.optString("app_name").trim()
+                clean.put("app_name", app)
+                sensitive = false
+            }
+            "open_split_screen" -> {
+                val p = args.optString("primary_app").ifBlank { args.optString("app_one") }.trim()
+                val s = args.optString("secondary_app").ifBlank { args.optString("app_two") }.trim()
+                if (p.isNotBlank()) clean.put("primary_app", p)
+                if (s.isNotBlank()) clean.put("secondary_app", s)
+                sensitive = false
+            }
+            "open_floating_window" -> {
+                val app = args.optString("app_name").trim()
+                if (app.isNotBlank()) clean.put("app_name", app)
                 sensitive = false
             }
 
@@ -559,6 +714,305 @@ class ActionRegistry(val context: Context) {
                 context.startActivity(Intent(Settings.ACTION_ZEN_MODE_PRIORITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 ActionResult.Success(name, "Opened Do Not Disturb settings.")
             }
+            "open_wallpaper_settings" -> {
+                val intent = Intent(Intent.ACTION_SET_WALLPAPER).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                try {
+                    context.startActivity(intent)
+                    ActionResult.Success(name, "Opened Wallpaper settings.")
+                } catch (_: Throwable) {
+                    context.startActivity(Intent(Settings.ACTION_DISPLAY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    ActionResult.Success(name, "Opened Display settings.")
+                }
+            }
+            "open_font_settings", "open_screen_timeout_settings" -> {
+                context.startActivity(Intent(Settings.ACTION_DISPLAY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                ActionResult.Success(name, "Opened Display settings.")
+            }
+            "open_battery_settings" -> {
+                val intent = Intent(Intent.ACTION_POWER_USAGE_SUMMARY).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                try {
+                    context.startActivity(intent)
+                    ActionResult.Success(name, "Opened Battery usage settings.")
+                } catch (_: Throwable) {
+                    context.startActivity(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    ActionResult.Success(name, "Opened Battery Saver settings.")
+                }
+            }
+            "open_app_permissions_settings" -> {
+                val intent = Intent(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                ActionResult.Success(name, "Opened Application settings.")
+            }
+            "open_app_notification_settings" -> {
+                val pkg = a.optString("package_name").ifBlank { context.packageName }
+                val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                        putExtra(Settings.EXTRA_APP_PACKAGE, pkg)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                } else {
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.parse("package:$pkg")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                }
+                context.startActivity(intent)
+                ActionResult.Success(name, "Opened notification settings for $pkg.")
+            }
+            "open_app_details_settings" -> {
+                val pkg = a.optString("package_name").ifBlank { context.packageName }
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:$pkg")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                ActionResult.Success(name, "Opened App Info settings for $pkg.")
+            }
+            "open_hotspot_settings" -> {
+                val intent = Intent(Intent.ACTION_MAIN).apply {
+                    setClassName("com.android.settings", "com.android.settings.TetherSettings")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                try {
+                    context.startActivity(intent)
+                    ActionResult.Success(name, "Opened Hotspot & Tethering settings.")
+                } catch (_: Throwable) {
+                    context.startActivity(Intent(Settings.ACTION_WIRELESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    ActionResult.Success(name, "Opened Network settings.")
+                }
+            }
+            "open_network_settings" -> {
+                context.startActivity(Intent(Settings.ACTION_WIRELESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                ActionResult.Success(name, "Opened Wireless & Network settings.")
+            }
+            "open_vpn_settings" -> {
+                context.startActivity(Intent(Settings.ACTION_VPN_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                ActionResult.Success(name, "Opened VPN settings.")
+            }
+            "open_language_settings" -> {
+                context.startActivity(Intent(Settings.ACTION_LOCALE_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                ActionResult.Success(name, "Opened Language & Region settings.")
+            }
+            "open_privacy_settings" -> {
+                context.startActivity(Intent(Settings.ACTION_PRIVACY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                ActionResult.Success(name, "Opened Privacy settings.")
+            }
+            "open_wifi_panel" -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val panelIntent = Intent(Settings.Panel.ACTION_INTERNET_CONNECTIVITY).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    try {
+                        context.startActivity(panelIntent)
+                        ActionResult.Success(name, "Opened Internet connectivity panel.")
+                    } catch (_: Throwable) {
+                        context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        ActionResult.Success(name, "Opened Wi-Fi settings.")
+                    }
+                } else {
+                    context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    ActionResult.Success(name, "Opened Wi-Fi settings.")
+                }
+            }
+
+            // Brightness Control
+            "get_brightness" -> {
+                val cur = try {
+                    Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS)
+                } catch (_: Throwable) { 128 }
+                val pct = (cur * 100 / 255.0).roundToInt().coerceIn(0, 100)
+                ActionResult.Success(name, "Current screen brightness is $pct% (level $cur of 255).")
+            }
+            "set_brightness" -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.System.canWrite(context)) {
+                    val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
+                        data = Uri.parse("package:" + context.packageName)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    try { context.startActivity(intent) } catch (_: Throwable) {}
+                    ActionResult.PermissionDenied(name, Manifest.permission.WRITE_SETTINGS)
+                } else {
+                    val pct = a.optInt("percentage", a.optInt("level", 50)).coerceIn(0, 100)
+                    val brightnessVal = (pct * 255 / 100.0).roundToInt().coerceIn(1, 255)
+                    try {
+                        Settings.System.putInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS, brightnessVal)
+                        ActionResult.Success(name, "Set screen brightness to $pct%.")
+                    } catch (e: Throwable) {
+                        ActionResult.ExecutionFailed(name, "Could not set screen brightness: ${e.message}")
+                    }
+                }
+            }
+            "adjust_brightness" -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.System.canWrite(context)) {
+                    val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
+                        data = Uri.parse("package:" + context.packageName)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    try { context.startActivity(intent) } catch (_: Throwable) {}
+                    ActionResult.PermissionDenied(name, Manifest.permission.WRITE_SETTINGS)
+                } else {
+                    val cur = try {
+                        Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS)
+                    } catch (_: Throwable) { 128 }
+                    val curPct = (cur * 100 / 255.0).roundToInt().coerceIn(0, 100)
+                    val direction = a.optString("direction").lowercase()
+                    val delta = a.optInt("delta", if (direction == "down") -20 else 20)
+                    val newPct = (curPct + delta).coerceIn(5, 100)
+                    val brightnessVal = (newPct * 255 / 100.0).roundToInt().coerceIn(1, 255)
+                    try {
+                        Settings.System.putInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS, brightnessVal)
+                        ActionResult.Success(name, "Adjusted screen brightness to $newPct% (was $curPct%).")
+                    } catch (e: Throwable) {
+                        ActionResult.ExecutionFailed(name, "Could not adjust screen brightness: ${e.message}")
+                    }
+                }
+            }
+
+            // Volume Streams & Sound Modes
+            "get_volume" -> {
+                val am = audioManager
+                if (am == null) {
+                    ActionResult.ExecutionFailed(name, "AudioManager unavailable.")
+                } else {
+                    val (stream, streamTitle) = resolveAudioStream(a.optString("stream"))
+                    val current = am.getStreamVolume(stream)
+                    val max = am.getStreamMaxVolume(stream)
+                    val min = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) am.getStreamMinVolume(stream) else 0
+                    val pct = if (max > min) ((current - min) * 100 / (max - min)) else (current * 100 / max.coerceAtLeast(1))
+                    ActionResult.Success(name, "$streamTitle volume is at $pct% (level $current of $max).")
+                }
+            }
+            "set_volume" -> {
+                val am = audioManager
+                if (am == null) {
+                    ActionResult.ExecutionFailed(name, "AudioManager unavailable.")
+                } else if (am.isVolumeFixed) {
+                    ActionResult.UnsupportedAction(name, "Device audio volume is fixed by hardware.")
+                } else {
+                    val (stream, streamTitle) = resolveAudioStream(a.optString("stream"))
+                    val max = am.getStreamMaxVolume(stream)
+                    val min = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) am.getStreamMinVolume(stream) else 0
+                    val targetLevel = if (a.has("percentage")) {
+                        val pct = a.getInt("percentage").coerceIn(0, 100)
+                        min + ((max - min) * pct / 100.0).roundToInt()
+                    } else if (a.has("level")) {
+                        a.getInt("level").coerceIn(min, max)
+                    } else {
+                        (max * 0.5).roundToInt()
+                    }
+                    am.setStreamVolume(stream, targetLevel, AudioManager.FLAG_SHOW_UI)
+                    ActionResult.Success(name, "Set $streamTitle volume to $targetLevel (of $max).")
+                }
+            }
+            "adjust_volume" -> {
+                val am = audioManager
+                if (am == null) {
+                    ActionResult.ExecutionFailed(name, "AudioManager unavailable.")
+                } else if (am.isVolumeFixed) {
+                    ActionResult.UnsupportedAction(name, "Device audio volume is fixed by hardware.")
+                } else {
+                    val (stream, streamTitle) = resolveAudioStream(a.optString("stream"))
+                    val direction = a.optString("direction").lowercase()
+                    val delta = a.optInt("delta", 0)
+                    val adjustDir = when {
+                        direction == "up" || delta > 0 -> AudioManager.ADJUST_RAISE
+                        direction == "down" || delta < 0 -> AudioManager.ADJUST_LOWER
+                        else -> AudioManager.ADJUST_SAME
+                    }
+                    am.adjustStreamVolume(stream, adjustDir, AudioManager.FLAG_SHOW_UI)
+                    val current = am.getStreamVolume(stream)
+                    val max = am.getStreamMaxVolume(stream)
+                    ActionResult.Success(name, "Adjusted $streamTitle volume to $current (of $max).")
+                }
+            }
+            "mute_stream" -> {
+                val am = audioManager
+                if (am == null) {
+                    ActionResult.ExecutionFailed(name, "AudioManager unavailable.")
+                } else if (am.isVolumeFixed) {
+                    ActionResult.UnsupportedAction(name, "Device audio volume is fixed by hardware.")
+                } else {
+                    val (stream, streamTitle) = resolveAudioStream(a.optString("stream"))
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        am.adjustStreamVolume(stream, AudioManager.ADJUST_MUTE, AudioManager.FLAG_SHOW_UI)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        am.setStreamMute(stream, true)
+                    }
+                    ActionResult.Success(name, "Muted $streamTitle stream.")
+                }
+            }
+            "unmute_stream" -> {
+                val am = audioManager
+                if (am == null) {
+                    ActionResult.ExecutionFailed(name, "AudioManager unavailable.")
+                } else if (am.isVolumeFixed) {
+                    ActionResult.UnsupportedAction(name, "Device audio volume is fixed by hardware.")
+                } else {
+                    val (stream, streamTitle) = resolveAudioStream(a.optString("stream"))
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        am.adjustStreamVolume(stream, AudioManager.ADJUST_UNMUTE, AudioManager.FLAG_SHOW_UI)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        am.setStreamMute(stream, false)
+                    }
+                    ActionResult.Success(name, "Unmuted $streamTitle stream.")
+                }
+            }
+            "set_ringer_mode" -> {
+                val am = audioManager
+                val nm = notificationManager
+                if (am == null) {
+                    ActionResult.ExecutionFailed(name, "AudioManager unavailable.")
+                } else {
+                    val modeStr = a.optString("mode").lowercase()
+                    val targetMode = when (modeStr) {
+                        "silent" -> AudioManager.RINGER_MODE_SILENT
+                        "vibrate" -> AudioManager.RINGER_MODE_VIBRATE
+                        else -> AudioManager.RINGER_MODE_NORMAL
+                    }
+                    if (targetMode == AudioManager.RINGER_MODE_SILENT && nm?.isNotificationPolicyAccessGranted == false) {
+                        val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        try { context.startActivity(intent) } catch (_: Throwable) {}
+                        ActionResult.PermissionDenied(name, "android.permission.ACCESS_NOTIFICATION_POLICY")
+                    } else {
+                        try {
+                            am.ringerMode = targetMode
+                            ActionResult.Success(name, "Ringer mode set to ${modeStr.uppercase()}.")
+                        } catch (e: SecurityException) {
+                            val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            try { context.startActivity(intent) } catch (_: Throwable) {}
+                            ActionResult.PermissionDenied(name, "android.permission.ACCESS_NOTIFICATION_POLICY")
+                        }
+                    }
+                }
+            }
+            "set_dnd_mode" -> {
+                val nm = notificationManager
+                if (nm == null) {
+                    ActionResult.ExecutionFailed(name, "NotificationManager unavailable.")
+                } else if (!nm.isNotificationPolicyAccessGranted) {
+                    val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    try { context.startActivity(intent) } catch (_: Throwable) {}
+                    ActionResult.PermissionDenied(name, "android.permission.ACCESS_NOTIFICATION_POLICY")
+                } else {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        val enabled = a.optBoolean("enabled", true)
+                        val filter = if (!enabled) {
+                            NotificationManager.INTERRUPTION_FILTER_ALL
+                        } else {
+                            when (a.optString("filter").lowercase()) {
+                                "alarms" -> NotificationManager.INTERRUPTION_FILTER_ALARMS
+                                "none", "total_silence" -> NotificationManager.INTERRUPTION_FILTER_NONE
+                                else -> NotificationManager.INTERRUPTION_FILTER_PRIORITY
+                            }
+                        }
+                        nm.setInterruptionFilter(filter)
+                        val statusStr = if (!enabled) "turned OFF" else "turned ON"
+                        ActionResult.Success(name, "Do Not Disturb $statusStr.")
+                    } else {
+                        ActionResult.UnsupportedAction(name, "DND filter API requires Android M+")
+                    }
+                }
+            }
             "open_calendar" -> {
                 val intent = Intent(Intent.ACTION_VIEW).setData(Uri.parse("content://com.android.calendar/time/")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
@@ -642,10 +1096,16 @@ class ActionRegistry(val context: Context) {
                 }
 
                 if (intent != null) {
-                    context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    ActionResult.Success(name, "Opened app: $appName")
+                    try {
+                        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        ActionResult.Success(name, "Opened app: $appName")
+                    } catch (e: ActivityNotFoundException) {
+                        ActionResult.AppNotFound(appName, "Cannot open $appName: Activity not found.")
+                    } catch (e: SecurityException) {
+                        ActionResult.PermissionDenied(name, e.message ?: "Permission denied launching $appName")
+                    }
                 } else {
-                    ActionResult.ExecutionFailed(name, "App “$appName” is not installed or cannot be launched.")
+                    ActionResult.AppNotFound(appName)
                 }
             }
             "go_home_screen" -> {
@@ -655,6 +1115,174 @@ class ActionRegistry(val context: Context) {
                 }
                 context.startActivity(intent)
                 ActionResult.Success(name, "Navigated to Home Screen.")
+            }
+            "lock_screen" -> {
+                if (AssistantAccessibilityService.isServiceRunning) {
+                    val locked = AssistantAccessibilityService.lockScreen()
+                    if (locked) {
+                        ActionResult.Success(name, "Screen locked.")
+                    } else {
+                        ActionResult.ExecutionFailed(name, "Failed to lock screen via Accessibility Service.")
+                    }
+                } else {
+                    ActionResult.AccessibilityNotEnabled(
+                        name,
+                        "Locking screen requires the Assistant Accessibility Service. Please enable FunctionGemma in Settings > Accessibility."
+                    )
+                }
+            }
+            "navigate_back" -> {
+                if (AssistantAccessibilityService.isServiceRunning) {
+                    AssistantAccessibilityService.navigateBack()
+                    ActionResult.Success(name, "Navigated back.")
+                } else {
+                    ActionResult.AccessibilityNotEnabled(
+                        name,
+                        "Back navigation requires the Assistant Accessibility Service. Please enable it in Settings > Accessibility."
+                    )
+                }
+            }
+            "show_recents" -> {
+                if (AssistantAccessibilityService.isServiceRunning) {
+                    AssistantAccessibilityService.showRecents()
+                    ActionResult.Success(name, "Opened Recent Apps overview.")
+                } else {
+                    ActionResult.AccessibilityNotEnabled(
+                        name,
+                        "Opening Recent Apps requires the Assistant Accessibility Service. Please enable it in Settings > Accessibility."
+                    )
+                }
+            }
+            "close_or_minimize_app" -> {
+                val app = a.optString("app_name").ifBlank { "the application" }
+                val intent = Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_HOME)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(intent)
+                ActionResult.Success(
+                    name,
+                    "Navigated to Home screen. Note: On Android 14+, third-party apps cannot force-stop other applications. Swipe $app away from the Recent Apps list to close it."
+                )
+            }
+            "open_play_store_search" -> {
+                val q = a.optString("query")
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("market://search?q=${Uri.encode(q)}")).apply {
+                    setPackage("com.android.vending")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                try {
+                    context.startActivity(intent)
+                    ActionResult.Success(name, "Opened Google Play Store search for “$q”.")
+                } catch (_: ActivityNotFoundException) {
+                    val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/search?q=${Uri.encode(q)}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(webIntent)
+                    ActionResult.Success(name, "Opened web Play Store search for “$q”.")
+                }
+            }
+            "open_play_store_listing" -> {
+                val app = a.optString("app_name")
+                val pkg = a.optString("package_name").ifBlank {
+                    when (app.lowercase()) {
+                        "whatsapp" -> "com.whatsapp"
+                        "youtube" -> "com.google.android.youtube"
+                        "spotify" -> "com.spotify.music"
+                        "chrome" -> "com.android.chrome"
+                        else -> null
+                    }
+                }
+                val intent = if (pkg != null) {
+                    Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg")).apply {
+                        setPackage("com.android.vending")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                } else {
+                    Intent(Intent.ACTION_VIEW, Uri.parse("market://search?q=${Uri.encode(app)}")).apply {
+                        setPackage("com.android.vending")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                }
+                try {
+                    context.startActivity(intent)
+                    ActionResult.Success(name, "Opened Play Store listing for “$app”. Please review and tap Install.")
+                } catch (_: ActivityNotFoundException) {
+                    val webUrl = if (pkg != null) "https://play.google.com/store/apps/details?id=$pkg" else "https://play.google.com/store/search?q=${Uri.encode(app)}"
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(webUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    ActionResult.Success(name, "Opened web Play Store for “$app”. Please review and tap Install.")
+                }
+            }
+            "open_play_store_updates" -> {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps?category=UPDATES")).apply {
+                    setPackage("com.android.vending")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                try {
+                    context.startActivity(intent)
+                    ActionResult.Success(name, "Opened Google Play Store updates screen. Review and update your apps in the Play Store.")
+                } catch (_: ActivityNotFoundException) {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps?category=UPDATES")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    ActionResult.Success(name, "Opened web Play Store updates.")
+                }
+            }
+            "request_app_install" -> {
+                val app = a.optString("app_name")
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("market://search?q=${Uri.encode(app)}")).apply {
+                    setPackage("com.android.vending")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                try {
+                    context.startActivity(intent)
+                    ActionResult.Success(name, "Opened Google Play Store to install “$app”. Please confirm installation in the Play Store.")
+                } catch (_: ActivityNotFoundException) {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/search?q=${Uri.encode(app)}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    ActionResult.Success(name, "Opened web Play Store to install “$app”.")
+                }
+            }
+            "request_app_update" -> {
+                val app = a.optString("app_name")
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("market://search?q=${Uri.encode(app)}")).apply {
+                    setPackage("com.android.vending")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                try {
+                    context.startActivity(intent)
+                    ActionResult.Success(name, "Opened Google Play Store to update “$app”. Please confirm update in the Play Store.")
+                } catch (_: ActivityNotFoundException) {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/search?q=${Uri.encode(app)}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    ActionResult.Success(name, "Opened web Play Store to update “$app”.")
+                }
+            }
+            "open_split_screen" -> {
+                val primary = a.optString("primary_app").ifBlank { "WhatsApp" }
+                val secondary = a.optString("secondary_app").ifBlank { "YouTube" }
+                if (AssistantAccessibilityService.isServiceRunning) {
+                    execute("open_app", JSONObject().put("app_name", primary))
+                    AssistantAccessibilityService.toggleSplitScreen()
+                    val secPkg = when (secondary.lowercase()) {
+                        "youtube" -> "com.google.android.youtube"
+                        "chrome" -> "com.android.chrome"
+                        "calculator" -> "com.google.android.calculator"
+                        "maps" -> "com.google.android.apps.maps"
+                        else -> null
+                    }
+                    val secIntent = secPkg?.let { context.packageManager.getLaunchIntentForPackage(it) }
+                    if (secIntent != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        secIntent.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(secIntent)
+                    } else {
+                        execute("open_app", JSONObject().put("app_name", secondary))
+                    }
+                    ActionResult.Success(name, "Opened $primary and $secondary in split screen mode.")
+                } else {
+                    ActionResult.MultiWindowUnavailable(
+                        "Split-screen automation requires the Assistant Accessibility Service. Please enable it in Settings > Accessibility."
+                    )
+                }
+            }
+            "open_floating_window" -> {
+                ActionResult.FloatingWindowUnsupported(
+                    "Floating window / Freeform mode is an OEM-specific proprietary feature on Realme UI / Android without standard public 3rd-party intent APIs. Please open the app in split-screen or full-screen."
+                )
             }
 
             "create_alarm" -> {
@@ -931,7 +1559,21 @@ class ActionRegistry(val context: Context) {
             }
             return -1
         }
+
+        fun resolveAudioStream(streamName: String?): Pair<Int, String> {
+            return when (streamName?.lowercase(java.util.Locale.ROOT)?.trim()) {
+                "ring", "ringer", "call_ring" -> Pair(AudioManager.STREAM_RING, "Ring")
+                "notification", "notifications" -> Pair(AudioManager.STREAM_NOTIFICATION, "Notification")
+                "alarm", "alarms" -> Pair(AudioManager.STREAM_ALARM, "Alarm")
+                "call", "voice_call", "voice", "in_call" -> Pair(AudioManager.STREAM_VOICE_CALL, "Voice Call")
+                "system" -> Pair(AudioManager.STREAM_SYSTEM, "System")
+                "media", "music", null, "" -> Pair(AudioManager.STREAM_MUSIC, "Media")
+                else -> Pair(AudioManager.STREAM_MUSIC, "Media")
+            }
+        }
     }
+
+    fun resolveAudioStream(streamName: String?): Pair<Int, String> = Companion.resolveAudioStream(streamName)
 }
 
 private class SchemaTool(

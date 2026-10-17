@@ -88,6 +88,7 @@ data class StructuredIntent(
     val dependencies: List<String> = emptyList(),
     val clarificationPrompt: String? = null,
     val canonicalToolName: String? = null,
+    val canonicalIntentId: CanonicalIntentId = CanonicalIntentId.UNKNOWN,
     val subIntents: List<StructuredIntent> = emptyList()
 ) {
     val isMultiAction: Boolean

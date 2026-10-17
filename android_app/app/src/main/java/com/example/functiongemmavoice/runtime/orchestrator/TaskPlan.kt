@@ -83,4 +83,24 @@ data class TaskPlan(
 
     val failedStepCount: Int
         get() = steps.count { it.status == StepStatus.FAILED }
+
+    fun generateSummary(): String {
+        val total = steps.size
+        val success = completedStepCount
+        val failed = failedStepCount
+        val skipped = steps.count { it.status == StepStatus.SKIPPED }
+        val cancelled = steps.count { it.status == StepStatus.CANCELLED }
+
+        return when (overallStatus) {
+            PlanStatus.COMPLETED -> "Successfully completed all $total actions."
+            PlanStatus.PARTIAL_SUCCESS -> {
+                val successfulNames = steps.filter { it.status == StepStatus.SUCCESS }.joinToString(", ") { it.displayName }
+                val failedNames = steps.filter { it.status == StepStatus.FAILED }.joinToString(", ") { it.displayName }
+                "Partially completed ($success/$total): Succeeded [$successfulNames]; Failed [$failedNames]."
+            }
+            PlanStatus.CANCELLED -> "Plan execution cancelled ($cancelled steps cancelled)."
+            PlanStatus.FAILED -> "Plan execution failed ($failed/$total actions failed)."
+            else -> "Execution in progress ($success/$total completed)."
+        }
+    }
 }

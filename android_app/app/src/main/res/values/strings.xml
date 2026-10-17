@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FunctionGemma Voice</string>
+    <string name="accessibility_service_label">FunctionGemma Assistant Automation</string>
+    <string name="accessibility_service_description">Enables FunctionGemma to perform requested system navigation actions such as locking the screen, returning home, going back, and opening split-screen. This service does not inspect or collect screen content or user data.</string>
+</resources>

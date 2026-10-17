@@ -223,7 +223,11 @@ class CapabilityRegistry(private val context: Context) {
             "open_location_settings", "open_airplane_mode_settings", "open_dnd_settings",
             "open_system_settings", "open_battery_saver_settings", "open_storage_settings",
             "open_security_settings", "open_date_time_settings", "open_developer_options",
-            "open_mobile_data_settings", "open_nfc_settings", "open_accessibility_settings"
+            "open_mobile_data_settings", "open_nfc_settings", "open_accessibility_settings",
+            "open_wallpaper_settings", "open_font_settings", "open_screen_timeout_settings",
+            "open_battery_settings", "open_app_permissions_settings", "open_app_notification_settings",
+            "open_app_details_settings", "open_hotspot_settings", "open_network_settings",
+            "open_vpn_settings", "open_language_settings", "open_privacy_settings", "open_wifi_panel"
         )
         for (s in settingsList) {
             register(
@@ -237,6 +241,113 @@ class CapabilityRegistry(private val context: Context) {
                 )
             )
         }
+
+        // Brightness & Display Control
+        register(
+            CapabilityDefinition(
+                canonicalId = "get_brightness",
+                domain = IntentDomain.SYSTEM_INSPECTION,
+                description = "Queries current screen brightness percentage and raw value.",
+                isRetrySafe = true,
+                verificationMethod = VerificationMethod.SYSTEM_STATE_QUERY
+            )
+        )
+        register(
+            CapabilityDefinition(
+                canonicalId = "set_brightness",
+                domain = IntentDomain.STATE_MUTATION,
+                description = "Sets screen brightness level or percentage (requires WRITE_SETTINGS).",
+                requiredParameters = listOf("percentage"),
+                requiredPermissions = listOf(Manifest.permission.WRITE_SETTINGS),
+                isRetrySafe = true,
+                verificationMethod = VerificationMethod.SYSTEM_STATE_QUERY
+            )
+        )
+        register(
+            CapabilityDefinition(
+                canonicalId = "adjust_brightness",
+                domain = IntentDomain.STATE_MUTATION,
+                description = "Adjusts screen brightness up or down by percentage.",
+                optionalParameters = listOf("direction", "delta"),
+                requiredPermissions = listOf(Manifest.permission.WRITE_SETTINGS),
+                isRetrySafe = false,
+                verificationMethod = VerificationMethod.SYSTEM_STATE_QUERY
+            )
+        )
+
+        // Volume Streams & Sound Modes
+        register(
+            CapabilityDefinition(
+                canonicalId = "get_volume",
+                domain = IntentDomain.SYSTEM_INSPECTION,
+                description = "Gets current volume for specified stream (media, ring, notification, alarm, call).",
+                optionalParameters = listOf("stream"),
+                isRetrySafe = true,
+                verificationMethod = VerificationMethod.SYSTEM_STATE_QUERY
+            )
+        )
+        register(
+            CapabilityDefinition(
+                canonicalId = "set_volume",
+                domain = IntentDomain.STATE_MUTATION,
+                description = "Sets volume for specified stream (media, ring, notification, alarm, call).",
+                optionalParameters = listOf("stream", "percentage", "level"),
+                isRetrySafe = true,
+                verificationMethod = VerificationMethod.SYSTEM_STATE_QUERY
+            )
+        )
+        register(
+            CapabilityDefinition(
+                canonicalId = "adjust_volume",
+                domain = IntentDomain.STATE_MUTATION,
+                description = "Raises or lowers volume for specified stream.",
+                optionalParameters = listOf("stream", "direction", "delta"),
+                isRetrySafe = false,
+                verificationMethod = VerificationMethod.SYSTEM_STATE_QUERY
+            )
+        )
+        register(
+            CapabilityDefinition(
+                canonicalId = "mute_stream",
+                domain = IntentDomain.STATE_MUTATION,
+                description = "Mutes the specified audio stream.",
+                optionalParameters = listOf("stream"),
+                isRetrySafe = true,
+                verificationMethod = VerificationMethod.SYSTEM_STATE_QUERY
+            )
+        )
+        register(
+            CapabilityDefinition(
+                canonicalId = "unmute_stream",
+                domain = IntentDomain.STATE_MUTATION,
+                description = "Unmutes the specified audio stream.",
+                optionalParameters = listOf("stream"),
+                isRetrySafe = true,
+                verificationMethod = VerificationMethod.SYSTEM_STATE_QUERY
+            )
+        )
+        register(
+            CapabilityDefinition(
+                canonicalId = "set_ringer_mode",
+                domain = IntentDomain.STATE_MUTATION,
+                description = "Sets device ringer mode to normal, vibrate, or silent.",
+                requiredParameters = listOf("mode"),
+                requiredPermissions = listOf(Manifest.permission.ACCESS_NOTIFICATION_POLICY),
+                isRetrySafe = true,
+                verificationMethod = VerificationMethod.SYSTEM_STATE_QUERY
+            )
+        )
+        register(
+            CapabilityDefinition(
+                canonicalId = "set_dnd_mode",
+                domain = IntentDomain.STATE_MUTATION,
+                description = "Enables or disables Do Not Disturb mode (requires ACCESS_NOTIFICATION_POLICY).",
+                optionalParameters = listOf("enabled", "filter"),
+                requiredPermissions = listOf(Manifest.permission.ACCESS_NOTIFICATION_POLICY),
+                isRetrySafe = true,
+                verificationMethod = VerificationMethod.SYSTEM_STATE_QUERY
+            )
+        )
 
         // App Launch & Web
         register(
@@ -301,6 +412,120 @@ class CapabilityRegistry(private val context: Context) {
                 description = "Navigates to home screen.",
                 requiresSystemUi = true,
                 isRetrySafe = true,
+                verificationMethod = VerificationMethod.INTENT_RESOLVED
+            )
+        )
+        register(
+            CapabilityDefinition(
+                canonicalId = "lock_screen",
+                domain = IntentDomain.STATE_MUTATION,
+                description = "Locks the device screen via Assistant Accessibility Service.",
+                requiresSystemUi = true,
+                isRetrySafe = false,
+                verificationMethod = VerificationMethod.SYSTEM_STATE_QUERY
+            )
+        )
+        register(
+            CapabilityDefinition(
+                canonicalId = "navigate_back",
+                domain = IntentDomain.SYSTEM_INSPECTION,
+                description = "Issues system back action via Accessibility Service.",
+                requiresSystemUi = true,
+                isRetrySafe = true,
+                verificationMethod = VerificationMethod.INTENT_RESOLVED
+            )
+        )
+        register(
+            CapabilityDefinition(
+                canonicalId = "show_recents",
+                domain = IntentDomain.SYSTEM_INSPECTION,
+                description = "Opens Recent Apps overview via Accessibility Service.",
+                requiresSystemUi = true,
+                isRetrySafe = true,
+                verificationMethod = VerificationMethod.INTENT_RESOLVED
+            )
+        )
+        register(
+            CapabilityDefinition(
+                canonicalId = "close_or_minimize_app",
+                domain = IntentDomain.APP_LAUNCH,
+                description = "Returns to Home and guides user to dismiss app from Recents.",
+                requiresSystemUi = true,
+                isRetrySafe = true,
+                verificationMethod = VerificationMethod.INTENT_RESOLVED
+            )
+        )
+        register(
+            CapabilityDefinition(
+                canonicalId = "open_play_store_search",
+                domain = IntentDomain.APP_LAUNCH,
+                description = "Opens Google Play Store search for the given query.",
+                requiredParameters = listOf("query"),
+                requiresSystemUi = true,
+                isRetrySafe = true,
+                verificationMethod = VerificationMethod.INTENT_RESOLVED
+            )
+        )
+        register(
+            CapabilityDefinition(
+                canonicalId = "open_play_store_listing",
+                domain = IntentDomain.APP_LAUNCH,
+                description = "Opens Google Play Store listing for application installation or review.",
+                requiredParameters = listOf("app_name"),
+                requiresSystemUi = true,
+                isRetrySafe = true,
+                verificationMethod = VerificationMethod.INTENT_RESOLVED
+            )
+        )
+        register(
+            CapabilityDefinition(
+                canonicalId = "open_play_store_updates",
+                domain = IntentDomain.APP_LAUNCH,
+                description = "Opens Google Play Store pending updates screen.",
+                requiresSystemUi = true,
+                isRetrySafe = true,
+                verificationMethod = VerificationMethod.INTENT_RESOLVED
+            )
+        )
+        register(
+            CapabilityDefinition(
+                canonicalId = "request_app_install",
+                domain = IntentDomain.APP_LAUNCH,
+                description = "Opens Google Play Store to install an application with user confirmation.",
+                requiredParameters = listOf("app_name"),
+                requiresSystemUi = true,
+                isRetrySafe = false,
+                verificationMethod = VerificationMethod.INTENT_RESOLVED
+            )
+        )
+        register(
+            CapabilityDefinition(
+                canonicalId = "request_app_update",
+                domain = IntentDomain.APP_LAUNCH,
+                description = "Opens Google Play Store to update an application with user confirmation.",
+                requiredParameters = listOf("app_name"),
+                requiresSystemUi = true,
+                isRetrySafe = false,
+                verificationMethod = VerificationMethod.INTENT_RESOLVED
+            )
+        )
+        register(
+            CapabilityDefinition(
+                canonicalId = "open_split_screen",
+                domain = IntentDomain.APP_LAUNCH,
+                description = "Automates split-screen multitasking with two apps.",
+                requiresSystemUi = true,
+                isRetrySafe = false,
+                verificationMethod = VerificationMethod.INTENT_RESOLVED
+            )
+        )
+        register(
+            CapabilityDefinition(
+                canonicalId = "open_floating_window",
+                domain = IntentDomain.APP_LAUNCH,
+                description = "Requests floating window / freeform mode (reports OEM unsupported status).",
+                requiresSystemUi = true,
+                isRetrySafe = false,
                 verificationMethod = VerificationMethod.INTENT_RESOLVED
             )
         )
